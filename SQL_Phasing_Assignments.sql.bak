@@ -221,4 +221,4 @@ select * from my_phase_and_date_diff
 /*ajouter les données salaires*/
 /*ajouter les données contrats*/
 /*vérifier les règles d'éligibilité - par exemple en cas d'alternance / enchainement de CDD*/
-/*Récupérer les salaires historiques dans la devise du salary basis en vigueur/*
+/*Récupérer les salaires historiques dans la devise du salary basis en vigueur*/
