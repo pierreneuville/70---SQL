@@ -70,7 +70,7 @@ select 		paf.person_number
 		and pld.freeze_date between pd.effective_start_date and pd.effective_end_date
 		and pld.freeze_date between paf.effective_start_date and paf.effective_end_date
 		and paf.person_number ='PNE_PHASE_02' /*param*/
-		and fabu.bu_name = 'CASA ES' /*param*/
+		/*and fabu.bu_name = 'CASA ES' param*/
 ),
 
 my_assignments_profile as
@@ -100,7 +100,7 @@ my_assignments_profile as
 			and pld.freeze_date between pd.effective_start_date and pd.effective_end_date
 			and pld.freeze_date between paf.effective_start_date and paf.effective_end_date
 			and paf.person_number ='PNE_PHASE_02' /*param*/
-			and fabu.bu_name = 'CASA ES' /*param*/
+			/*and fabu.bu_name = 'CASA ES' param*/
 ),
 
 my_total_assignments as(
@@ -221,3 +221,4 @@ select * from my_phase_and_date_diff
 /*ajouter les données salaires*/
 /*ajouter les données contrats*/
 /*vérifier les règles d'éligibilité - par exemple en cas d'alternance / enchainement de CDD*/
+/*Récupérer les salaires historiques dans la devise du salary basis en vigueur/*
