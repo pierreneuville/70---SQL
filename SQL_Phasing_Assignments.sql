@@ -185,7 +185,7 @@ END as effective_start_date
 END as effective_end_date
 --,first_eff_date
 --,next_eff_start_date
-,next_eff_end_date
+--,next_eff_end_date
 --,effective_end_date
 --,effective_end_date
 ,bu_name
@@ -195,9 +195,26 @@ END as effective_end_date
 ,LAST_SITUATION
 from my_phase_right_dates,my_plan_date pld
 order by effective_start_date
+),
+
+my_phase_and_date_diff as(
+SELECT
+	person_number
+	,person_id
+	,last_name
+	,first_name
+	,effective_start_date
+	,effective_end_date
+	,(effective_end_date - effective_start_date + 1) as "Présence calendaire ajusté"
+	,bu_name
+	,fte
+	,department_name 
+	,LAST_SITUATION as Situation
+FROM my_phase_right_dates_including_quarter
 )
 
-select * from my_phase_right_dates_including_quarter
+
+select * from my_phase_and_date_diff
 
 /*ne pas recaller la date de quarter si le collab passe de tout collab à C2 en cours d'année --> DONE*/
 /*gérer le passage à une autre et depuis une autre entité Groupe*/
