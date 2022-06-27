@@ -203,4 +203,4 @@ select * from my_phase_right_dates_including_quarter
 /*gérer le passage à une autre et depuis une autre entité Groupe*/
 /*ajouter les données salaires*/
 /*ajouter les données contrats*/
-/*vérifier les règles d'éligibilité - par exemple en cas d'alternance / enchainement de CDD*/
+/*vérifier les règles d'éligibilité - par exemple en cas d'alternance*/
