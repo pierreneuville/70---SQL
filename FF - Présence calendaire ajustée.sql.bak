@@ -1,0 +1,13 @@
+/*Récupérer l'assignement traité à la date d'extraction du plan*/
+
+
+/*Vérifier si le collaborateur est dans la table des assignment SEGMENT*/
+	-- Si le collaborateur est dans la table des assignments alors l'assignment est sur la phase
+	-- 
+
+
+/*Comme le SQL de assignment segment récupère les phases en dehors de la dernière phase qui doit être dans le plan principal
+ - Récupérer la date de la phase en cours
+ - Pour détecter une phase il faut comparer les données en vigueur à date d'extraction de plan
+ - 
+  
