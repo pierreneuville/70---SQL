@@ -57,10 +57,12 @@ select 				paf.person_number
 				   ,pd.name as department_name
 				   ,epp.situation as C1_C2_DIR
 				   ,paa.reason_code
+				   ,sal.SALARY_AMOUNT
 		from PER_ALL_PEOPLE_F paf
-		left join PER_ALL_ASSIGNMENTS_F paa on paa.person_id = paf.person_id and assignment_type='E' --and ASSIGNMENT_STATUS_TYPE = 'ACTIVE'
+		inner join PER_ALL_ASSIGNMENTS_F paa on paa.person_id = paf.person_id and assignment_type='E' --and ASSIGNMENT_STATUS_TYPE = 'ACTIVE'
 		left join my_plan_date pld on 1=1
 		left join emp_profiles epp on epp.person_id =paf.person_id and EMP_EFFECTIVE_START_DATE<=paa.effective_start_date
+		left join CMP_SALARY sal on sal.person_id = paa.person_id and sal.assignment_id=paa.assignment_id and sal.date_from<=paa.effective_start_date --between  and sal.date_to
 		left join PER_PERSON_NAMES_F PPN on paf.person_id = ppn.person_id and ppn.name_type='GLOBAL'
 		left join per_departments pd on paa.organization_id = pd.organization_id
 		left join FUN_ALL_BUSINESS_UNITS_V fabu on paa.BUSINESS_UNIT_ID = fabu.BU_ID
@@ -88,11 +90,47 @@ my_assignments_profile as
 					   ,pd.name as department_name
 					   ,epp.situation as C1_C2_DIR
 					   ,paa.reason_code
+					   ,sal.SALARY_AMOUNT
 			from PER_ALL_PEOPLE_F paf
 			inner join emp_profiles epp on epp.person_id = paf.person_id
 			left join my_plan_date pld on 1=1
+			inner join PER_PERSON_NAMES_F PPN on paf.person_id = ppn.person_id and ppn.name_type='GLOBAL'
+			inner join PER_ALL_ASSIGNMENTS_F paa on paa.person_id = paf.person_id and assignment_type='E'  and epp.EMP_EFFECTIVE_START_DATE between paa.effective_start_date and paa.effective_end_date --and ASSIGNMENT_STATUS_TYPE = 'ACTIVE'
+			left join CMP_SALARY sal on sal.person_id = paa.person_id and sal.assignment_id=paa.assignment_id and epp.EMP_EFFECTIVE_START_DATE between sal.date_from and sal.date_to
+			left join per_departments pd on paa.organization_id = pd.organization_id
+			left join FUN_ALL_BUSINESS_UNITS_V fabu on paa.BUSINESS_UNIT_ID = fabu.BU_ID
+			left join PER_ASSIGN_WORK_MEASURES_F PAMMF on paa.assignment_id = PAMMF.assignment_id and PAMMF.unit = 'FTE' and paa.effective_start_date between PAMMF.effective_start_date and PAMMF.effective_end_date
+			left join HR_LOCATIONS_ALL hla on paa.location_id = hla.location_id
+			where 1=1 
+			and pld.freeze_date between ppn.effective_start_date and ppn.effective_end_date
+			and pld.freeze_date between pd.effective_start_date and pd.effective_end_date
+			and pld.freeze_date between paf.effective_start_date and paf.effective_end_date
+			and paf.person_number like (:Person_number_param) /*param*/
+			/*and fabu.bu_name = 'CASA ES' param*/
+),
+
+my_assignments_salary as
+(
+	select 				paf.person_number
+					   ,paf.person_id
+					   ,ppn.last_name
+					   ,ppn.first_name
+					   ,sal.DATE_FROM
+					   ,null AS first_eff_date
+					   ,sal.DATE_TO as effective_end_date
+					   ,fabu.bu_name
+					   ,PAMMF.Value	"FTE"
+					   ,pd.name as department_name
+					   ,epp.situation as C1_C2_DIR
+					   ,sal.SALARY_REASON_CODE
+					   ,sal.SALARY_AMOUNT
+			from PER_ALL_PEOPLE_F paf
+			inner join CMP_SALARY sal on sal.person_id = paf.person_id
+			left join my_plan_date pld on 1=1
 			left join PER_PERSON_NAMES_F PPN on paf.person_id = ppn.person_id and ppn.name_type='GLOBAL'
-			left join PER_ALL_ASSIGNMENTS_F paa on paa.person_id = paf.person_id and assignment_type='E'  and epp.EMP_EFFECTIVE_START_DATE between paa.effective_start_date and paa.effective_end_date --and ASSIGNMENT_STATUS_TYPE = 'ACTIVE'
+			left join PER_ALL_ASSIGNMENTS_F paa on paa.person_id = sal.person_id and paa.assignment_id=sal.assignment_id and paa.assignment_type='E'  and sal.date_from between paa.effective_start_date and paa.effective_end_date
+			left join emp_profiles epp on epp.person_id =paf.person_id and EMP_EFFECTIVE_START_DATE<=paa.effective_start_date
+			left join PER_ALL_ASSIGNMENTS_F paa2 on paa2.person_id = paf.person_id and paa2.assignment_type='E'  and epp.EMP_EFFECTIVE_START_DATE between paa2.effective_start_date and paa2.effective_end_date --and ASSIGNMENT_STATUS_TYPE = 'ACTIVE'
 			left join per_departments pd on paa.organization_id = pd.organization_id
 			left join FUN_ALL_BUSINESS_UNITS_V fabu on paa.BUSINESS_UNIT_ID = fabu.BU_ID
 			left join PER_ASSIGN_WORK_MEASURES_F PAMMF on paa.assignment_id = PAMMF.assignment_id and PAMMF.unit = 'FTE' and paa.effective_start_date between PAMMF.effective_start_date and PAMMF.effective_end_date
@@ -109,6 +147,8 @@ my_total_assignments as(
 select * from my_assignments
 union 
 select * from my_assignments_profile
+UNION
+select * from my_assignments_salary
 ),
 
 my_phases as (
@@ -129,6 +169,7 @@ my_phases as (
 	,bu_name
 	,fte
 	,department_name
+	,SALARY_AMOUNT
 	,C1_C2_DIR
 	from my_total_assignments paa
 	where 1=1
@@ -158,7 +199,8 @@ END as effective_start_date
 END as effective_end_date
 ,bu_name
 ,fte
-,department_name 
+,department_name
+,SALARY_AMOUNT 
 ,C1_C2_DIR
 ,epp2.situation AS LAST_SITUATION
 ,first_date_ass
@@ -202,7 +244,8 @@ END as effective_end_date
 --,effective_end_date
 ,bu_name
 ,fte
-,department_name 
+,department_name
+,SALARY_AMOUNT 
 ,C1_C2_DIR
 ,LAST_SITUATION
 from my_phase_right_dates,my_plan_date pld
@@ -221,17 +264,21 @@ SELECT
 	,bu_name
 	,fte
 	,department_name 
+	,SALARY_AMOUNT
 	,C1_C2_DIR as Situation
 	,Last_situation as current_situation_C1_C2
 FROM my_phase_right_dates_including_quarter
 )
 
 select * from my_phase_and_date_diff
-where bu_name ='CASA ES'
+where 1=1
+and bu_name ='CASA ES'
+--and current_situation_C1_C2 = 'C1'
 
 /*ne pas recaller la date de quarter si le collab passe de tout collab à C2 en cours d'année --> DONE*/
 /*gérer le passage à une autre et depuis une autre entité Groupe-->DONE*/
-/*ajouter les données salaires*/
+/*ajouter les données salaires --> DONE*/
+/*prolonger les données de salaire en cas de mobilité intra groupe*/
 /*ajouter les données contrats*/
 /*vérifier les règles d'éligibilité - par exemple en cas d'alternance / enchainement de CDD*/
 /*Récupérer les salaires historiques dans la devise du salary basis en vigueur toto*/
