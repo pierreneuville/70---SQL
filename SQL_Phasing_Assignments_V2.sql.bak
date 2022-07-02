@@ -92,7 +92,7 @@ my_assignments_profile as
 					   ,ppn.first_name
 					   ,epp.EMP_EFFECTIVE_START_DATE as effective_start_date
 					   --,epp.EMP_EFFECTIVE_START_DATE AS first_eff_date
-					   ,to_date(to_char('31/12/4712'),'dd/mm/yyyy') as effective_end_date
+					   ,null as effective_end_date
 					  -- ,paa.effective_end_date as effective_end_date
 					   ,fabu.bu_name
 					   ,PAMMF.Value	"FTE"
@@ -200,16 +200,11 @@ select 			    mtaw.person_number
 					,LEAD(effective_start_date) OVER (PARTITION BY person_id ORDER BY effective_start_date, effective_end_date) AS next_eff_start_date
 					,LEAD(effective_end_date) OVER (PARTITION BY person_id ORDER BY effective_start_date, effective_end_date) AS next_eff_end_date
 					,LEAD(reason_code) OVER (PARTITION BY person_id ORDER BY effective_start_date, effective_end_date) AS next_reason_code
-					--,FIRST_VALUE(mtaw.effective_start_date) OVER (PARTITION BY mtaw.person_id,mtaw.bu_name,mtaw.FTE,mtaw.department_name ORDER BY mtaw.person_id, mtaw.effective_start_date) AS first_eff_date
-					--,LAST_VALUE(mtaw.effective_start_date) OVER (PARTITION BY mtaw.person_id,mtaw.bu_name,mtaw.FTE,mtaw.department_name ORDER BY mtaw.person_id, mtaw.effective_start_date) AS last_eff_date
 		from my_total_assignments_wrk mtaw
 		left join my_plan_date pld on 1=1
-where 1=1
-and not (mtaw.effective_start_date=mtaw.prev_eff_start_date_mtaw and  mtaw.effective_end_date= mtaw.next_eff_end_date_mtaw)
+where not (mtaw.effective_start_date=mtaw.prev_eff_start_date_mtaw and  mtaw.effective_end_date= mtaw.next_eff_end_date_mtaw)
 and  mtaw.effective_end_date > pld.start_date
 order by mtaw.effective_start_date, mtaw.effective_end_date),
-
-
 
 effective_end_date_corrected as(
 select 
@@ -223,25 +218,14 @@ select
 	,C1_C2_DIR
 	,reason_code
 	,SALARY_AMOUNT
-	,CASE 
-		WHEN actual_termination_date is null THEN to_date(to_char('31/12/4712'),'dd/mm/yyyy')
-		ELSE actual_termination_date
-	END as actual_termination_date
-	,effective_start_date
-	,effective_end_date
-	,next_eff_start_date
-	,next_eff_end_date
+	,actual_termination_date
 	,CASE
 		WHEN effective_start_date < pld.start_date THEN pld.start_date
-		WHEN effective_start_date > pld.end_date THEN to_date(to_char('31/12/4712'),'dd/mm/yyyy')
 		WHEN C1_C2_DIR_FREEZE is null and REASON_CODE='MIG' and effective_start_date<add_months(trunc(pld.start_date, 'YEAR'), 3)-1/24/60/60 /*end_of_Q1*/ THEN TRUNC(pld.start_date, 'YEAR') /*begin_year*/
 		ELSE effective_start_date
 	END as effective_start_date_corrected
 	,CASE
-		WHEN EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') and NEXT_EFF_START_DATE is not null then NEXT_EFF_START_DATE-1
-		WHEN effective_end_date > pld.end_date and EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') THEN ADD_MONTHS(TRUNC(pld.start_date, 'YEAR'), 12)-1/24/60/60 /*end_of_year*/
 		WHEN effective_end_date > pld.end_date THEN pld.start_date
-		WHEN effective_end_date < pld.start_date THEN to_date(to_char('31/12/4712'),'dd/mm/yyyy')
 		WHEN C1_C2_DIR_FREEZE is null and next_reason_code='MOG' and effective_end_date>add_months(trunc(pld.start_date, 'YEAR'), 9)-1/24/60/60  /*end_of_Q3*/ THEN ADD_MONTHS(TRUNC(pld.start_date, 'YEAR'), 12)-1/24/60/60 /*end_of_year*/
 		WHEN C1_C2_DIR_FREEZE is not null and NEXT_EFF_START_DATE-1 = ACTUAL_TERMINATION_DATE THEN ACTUAL_TERMINATION_DATE
 		WHEN EFFECTIVE_END_DATE>NEXT_EFF_START_DATE THEN NEXT_EFF_START_DATE-1
@@ -250,42 +234,9 @@ select
 	END as effective_end_date_corrected
 from my_total_assignments_without_duplicate
 left join my_plan_date pld on 1=1
-order by effective_start_date_corrected,effective_end_date_corrected),
+order by effective_start_date_corrected,effective_end_date_corrected)
 
-my_real_phase as (
 select * from effective_end_date_corrected
 left join my_plan_date pld on 1=1
 where EFFECTIVE_START_DATE_CORRECTED<actual_termination_date
-and EFFECTIVE_END_DATE_CORRECTED >= pld.start_date),
-
-my_real_phase_adjusted as (
-select 	a.*
-		,CASE
-			WHEN EFFECTIVE_END_DATE_CORRECTED= ADD_MONTHS(TRUNC(start_date, 'YEAR'), 12)-1/24/60/60 /*end_of_year*/ THEN ADD_MONTHS(TRUNC(start_date, 'YEAR'), 12)-1/24/60/60 /*end_of_year*/
-			WHEN EFFECTIVE_END_DATE_CORRECTED = ACTUAL_TERMINATION_DATE THEN EFFECTIVE_END_DATE_CORRECTED
-			ELSE LEAD(EFFECTIVE_START_DATE_CORRECTED) OVER (ORDER BY EFFECTIVE_START_DATE_CORRECTED) - 1 
-		END As EFFECTIVE_END_DATE_ADJUSTED
-from (
-	select 	mrp.* 
-			,person_id||bu_name||FTE||department_name|| SALARY_AMOUNT as KEY
-			,LAG(person_id||bu_name||FTE||department_name|| SALARY_AMOUNT || C1_C2_DIR ) OVER (PARTITION BY person_id,bu_name,FTE,department_name, SALARY_AMOUNT, C1_C2_DIR ORDER BY EFFECTIVE_START_DATE_CORRECTED) As PREV_KEY
-	from my_real_phase mrp) a
-where PREV_KEY is null
-order by EFFECTIVE_START_DATE_CORRECTED, EFFECTIVE_END_DATE_CORRECTED)
-
-select 	person_number
-		,person_id
-		,last_name
-		,first_name
-		,bu_name
-		,FTE
-		,department_name
-		,C1_C2_DIR
-		,reason_code
-		,SALARY_AMOUNT
-		,EFFECTIVE_START_DATE_CORRECTED
-		,EFFECTIVE_END_DATE_ADJUSTED
-		--,to_date(CAST(EFFECTIVE_START_DATE_CORRECTED AS DATE),'dd/mm/yyyy') as EFFECTIVE_START_DATE_CORRECTED2
-		--,to_date(CAST(EFFECTIVE_END_DATE_ADJUSTED AS DATE),'dd/mm/yyyy') as EFFECTIVE_END_DATE_ADJUSTED2
-		--,to_date(to_char(EFFECTIVE_END_DATE_ADJUSTED),'dd/mm/yyyy')-to_date(to_char(EFFECTIVE_START_DATE_CORRECTED),'dd/mm/yyyy') +1 as TEMPS_CALENDAIRE_AJUSTEE
-from my_real_phase_adjusted
+and EFFECTIVE_END_DATE_CORRECTED >= pld.start_date
