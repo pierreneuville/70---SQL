@@ -234,15 +234,15 @@ select
 	,CASE
 		WHEN effective_start_date < pld.start_date THEN pld.start_date
 		WHEN effective_start_date > pld.end_date THEN to_date(to_char('31/12/4712'),'dd/mm/yyyy')
-		WHEN C1_C2_DIR_FREEZE is null and REASON_CODE='MIG' and effective_start_date<add_months(trunc(pld.start_date, 'YEAR'), 3)-1/24/60/60 /*end_of_Q1*/ THEN TRUNC(pld.start_date, 'YEAR') /*begin_year*/
+		WHEN C1_C2_DIR_FREEZE is null and REASON_CODE='MIG' and effective_start_date<add_months(trunc(pld.start_date,'Q')-1,3) +1 /*end_of_Q1*/ THEN TRUNC(pld.start_date, 'YEAR') /*begin_year*/
 		ELSE effective_start_date
 	END as effective_start_date_corrected
 	,CASE
 		WHEN EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') and NEXT_EFF_START_DATE is not null then NEXT_EFF_START_DATE-1
-		WHEN effective_end_date > pld.end_date and EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') THEN ADD_MONTHS(TRUNC(pld.start_date, 'YEAR'), 12)-1/24/60/60 /*end_of_year*/
+		WHEN effective_end_date > pld.end_date and EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') THEN add_months(trunc(pld.start_date,'Q')-1,12) /*end_of_year*/
 		WHEN effective_end_date > pld.end_date THEN pld.start_date
 		WHEN effective_end_date < pld.start_date THEN to_date(to_char('31/12/4712'),'dd/mm/yyyy')
-		WHEN C1_C2_DIR_FREEZE is null and next_reason_code='MOG' and effective_end_date>add_months(trunc(pld.start_date, 'YEAR'), 9)-1/24/60/60  /*end_of_Q3*/ THEN ADD_MONTHS(TRUNC(pld.start_date, 'YEAR'), 12)-1/24/60/60 /*end_of_year*/
+		WHEN C1_C2_DIR_FREEZE is null and next_reason_code='MOG' and effective_end_date>add_months(trunc(pld.start_date,'Q')-1,9)+1  /*end_of_Q3*/ THEN add_months(trunc(pld.start_date,'Q')-1,12) /*end_of_year*/
 		WHEN C1_C2_DIR_FREEZE is not null and NEXT_EFF_START_DATE-1 = ACTUAL_TERMINATION_DATE THEN ACTUAL_TERMINATION_DATE
 		WHEN EFFECTIVE_END_DATE>NEXT_EFF_START_DATE THEN NEXT_EFF_START_DATE-1
 		WHEN EFFECTIVE_END_DATE is null THEN NEXT_EFF_START_DATE-1
@@ -261,7 +261,7 @@ and EFFECTIVE_END_DATE_CORRECTED >= pld.start_date),
 my_real_phase_adjusted as (
 select 	a.*
 		,CASE
-			WHEN EFFECTIVE_END_DATE_CORRECTED= ADD_MONTHS(TRUNC(start_date, 'YEAR'), 12)-1/24/60/60 /*end_of_year*/ THEN ADD_MONTHS(TRUNC(start_date, 'YEAR'), 12)-1/24/60/60 /*end_of_year*/
+			WHEN EFFECTIVE_END_DATE_CORRECTED= add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/ THEN add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/
 			WHEN EFFECTIVE_END_DATE_CORRECTED = ACTUAL_TERMINATION_DATE THEN EFFECTIVE_END_DATE_CORRECTED
 			ELSE LEAD(EFFECTIVE_START_DATE_CORRECTED) OVER (ORDER BY EFFECTIVE_START_DATE_CORRECTED) - 1 
 		END As EFFECTIVE_END_DATE_ADJUSTED
@@ -285,7 +285,5 @@ select 	person_number
 		,SALARY_AMOUNT
 		,EFFECTIVE_START_DATE_CORRECTED
 		,EFFECTIVE_END_DATE_ADJUSTED
-		--,to_date(CAST(EFFECTIVE_START_DATE_CORRECTED AS DATE),'dd/mm/yyyy') as EFFECTIVE_START_DATE_CORRECTED2
-		--,to_date(CAST(EFFECTIVE_END_DATE_ADJUSTED AS DATE),'dd/mm/yyyy') as EFFECTIVE_END_DATE_ADJUSTED2
-		--,to_date(to_char(EFFECTIVE_END_DATE_ADJUSTED),'dd/mm/yyyy')-to_date(to_char(EFFECTIVE_START_DATE_CORRECTED),'dd/mm/yyyy') +1 as TEMPS_CALENDAIRE_AJUSTEE
+		,EFFECTIVE_END_DATE_ADJUSTED-EFFECTIVE_START_DATE_CORRECTED +1 as PRESENCE_CALENDAIRE_AJUSTEE
 from my_real_phase_adjusted
