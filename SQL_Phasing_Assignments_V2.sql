@@ -261,11 +261,8 @@ and EFFECTIVE_END_DATE_CORRECTED >= pld.start_date),
 my_real_phase_adjusted as (
 select 	a.*
 		,CASE
-<<<<<<< HEAD
 			WHEN EFFECTIVE_END_DATE_CORRECTED= add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/ THEN add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/
-=======
 			WHEN EFFECTIVE_END_DATE_CORRECTED= ADD_MONTHS(TRUNC(start_date, 'YEAR'), 12)-1/24/60/60 /*end_of_year*/ THEN add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/
->>>>>>> 3cc92927c61d41c6d9b96d4f8d5f5e3dfa3a6a78
 			WHEN EFFECTIVE_END_DATE_CORRECTED = ACTUAL_TERMINATION_DATE THEN EFFECTIVE_END_DATE_CORRECTED
 			ELSE LEAD(EFFECTIVE_START_DATE_CORRECTED) OVER (ORDER BY EFFECTIVE_START_DATE_CORRECTED)
 		END As EFFECTIVE_END_DATE_ADJUSTED
