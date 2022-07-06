@@ -289,9 +289,14 @@ select 	person_number
 		,EFFECTIVE_END_DATE_ADJUSTED-EFFECTIVE_START_DATE_CORRECTED +1 as PRESENCE_CALENDAIRE_AJUSTEE
 from my_real_phase_adjusted
 
-/*Suppression de la phase en cours car au niveau du plan*/
-/*Ajout des phases en cas de changements de contrats --> Vérifier les règles en vigueur*/
-/*Check vs les règles d'éligibilité et cohérence Fast Formula*/
-/*Ajout des phases en cas de passage à population régalienne*/ 
-/*Ajout des conversions de devises*/
+/*
+- Suppression de la phase en cours car au niveau du plan
+- Ajout des phases en cas de changements de contrats --> Vérifier les règles en vigueur
+- Check vs les règles d'éligibilité et cohérence Fast Formula
+- Ajout des phases en cas de passage à population régalienne
+- Ajout des conversions de devises
+- Ajout du taux cible
+- Intégrer l’Assignment N° du collab (ce point j’ai oublié de te le remonter) 
+- Retirer de la requête les C1 ayant effectué une Mobilité Intra-Groupe (car cela sera géré au niveau de la double ligne de la feuille de travail)
+*/
 
