@@ -293,4 +293,5 @@ from my_real_phase_adjusted
 /*Ajout des phases en cas de changements de contrats --> Vérifier les règles en vigueur*/
 /*Check vs les règles d'éligibilité et cohérence Fast Formula*/
 /*Ajout des phases en cas de passage à population régalienne*/ 
+/*Ajout des conversions de devises*/
 
