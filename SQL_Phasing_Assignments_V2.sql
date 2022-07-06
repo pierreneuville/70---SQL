@@ -7,7 +7,7 @@ select 	cmp_plan.plan_id,
 		cmp_period.freeze_date 
 from cmp_plans_b cmp_plan
 inner join cmp_plan_periods cmp_period on cmp_plan.plan_id = cmp_period.plan_id
-inner join cmp_plans_tl cpm_lang on cmp_plan.plan_id = cpm_lang.plan_id and cpm_lang.LANGUAGE = 'US'
+inner join cmp_plans_tl cpm_lang on cmp_plan.plan_id = cpm_lang.plan_id and cpm_lang.LANGUAGE = 'US' /*param*/
 where 1=1
 and plan_name ='CASA - Campagne Salariale (PNE)' /*param*/
 and period_name='CASAES - 2022' /*param*/
@@ -38,7 +38,7 @@ emp_profiles as (
 	and paf.person_id= HPB.person_id
 	and HPB.PROFILE_ID=HPI.PROFILE_ID
 	and HPI.CONTENT_TYPE_ID=CT.CONTENT_TYPE_ID
-	and CT.language='F'
+	and CT.language='F' /*param*/
 	and HPI.SECTION_ID='300000003197644' /*param à vérifier lors de la migration d'environnements*/
 	and paf.person_number like (:Person_number_param) /*param*/
 	and ((HPI.ATTRIBUTE_DATE2 is not null) or (HPI.ATTRIBUTE_DATE1 is not null))
@@ -292,4 +292,5 @@ from my_real_phase_adjusted
 /*Suppression de la phase en cours car au niveau du plan*/
 /*Ajout des phases en cas de changements de contrats --> Vérifier les règles en vigueur*/
 /*Check vs les règles d'éligibilité et cohérence Fast Formula*/
-/*Ajout des phases en cas de passage à population régalienne*/
+/*Ajout des phases en cas de passage à population régalienne*/ 
+
