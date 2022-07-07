@@ -62,7 +62,8 @@ select 				'ASSIGNMENT'
 				   ,epp.situation as C1_C2_DIR
 				   ,epp_freeze.situation as C1_C2_DIR_FREEZE
 				   ,paa.reason_code
-				   ,sal.SALARY_AMOUNT
+				   ,sal.SALARY_AMOUNT as CURRENCY
+				   ,sal.CURRENCY_CODE
 				   ,pps.actual_termination_date
 				   --,'ASSIGNMENT' as ASS_TYPE
 		from PER_ALL_PEOPLE_F paf
@@ -106,7 +107,8 @@ my_assignments_profile as
 					   ,epp.situation as C1_C2_DIR
 					   ,epp_freeze.situation as C1_C2_DIR_FREEZE
 					   ,paa.reason_code
-					   ,sal.SALARY_AMOUNT
+					   ,sal.SALARY_AMOUNT as CURRENCY
+					   ,sal.CURRENCY_CODE
 					   ,pps.actual_termination_date
 					  -- ,'PROFILE' as ASS_TYPE
 			from PER_ALL_PEOPLE_F paf
@@ -150,6 +152,7 @@ my_assignments_salary as
 					   ,epp_freeze.situation as C1_C2_DIR_FREEZE
 					   ,sal.SALARY_REASON_CODE
 					   ,sal.SALARY_AMOUNT
+					   ,sal.CURRENCY_CODE as CURRENCY
 					   ,pps.actual_termination_date
 					--   ,'SALARY' as ASS_TYPE
 			from PER_ALL_PEOPLE_F paf
@@ -207,6 +210,7 @@ select 			    mtaw.person_number
 					,mtaw.C1_C2_DIR_FREEZE
 					,mtaw.reason_code
 					,mtaw.SALARY_AMOUNT
+					,mtaw.CURRENCY
 					,mtaw.actual_termination_date
 					,pld.start_date
 					,LAG(effective_start_date) OVER (PARTITION BY person_id ORDER BY effective_start_date, effective_end_date) AS prev_eff_start_date
@@ -219,8 +223,8 @@ select 			    mtaw.person_number
 		from my_total_assignments_wrk mtaw
 		left join my_plan_date pld on 1=1
 where 1=1
-and not (mtaw.effective_start_date=mtaw.prev_eff_start_date_mtaw and  mtaw.effective_end_date= mtaw.next_eff_end_date_mtaw)
-and  mtaw.effective_end_date > pld.start_date
+and not (mtaw.effective_start_date=mtaw.prev_eff_start_date_mtaw and mtaw.effective_end_date= mtaw.next_eff_end_date_mtaw)
+and  mtaw.effective_end_date >= pld.start_date
 order by mtaw.effective_start_date, mtaw.effective_end_date),
 
 
@@ -238,6 +242,7 @@ select
 	,C1_C2_DIR
 	,reason_code
 	,SALARY_AMOUNT
+	,CURRENCY
 	,CASE 
 		WHEN actual_termination_date is null THEN to_date(to_char('31/12/4712'),'dd/mm/yyyy')
 		ELSE actual_termination_date
@@ -303,15 +308,18 @@ select 	mrpa.person_number
 		,mrpa.C1_C2_DIR
 		,mrpa.reason_code
 		,mrpa.SALARY_AMOUNT
+		,mrpa.CURRENCY
+		,sal2.CURRENCY_CODE as LAST_CURRENCY_FOR_ASSIGNMENT
 		,mrpa.EFFECTIVE_START_DATE_CORRECTED
 		,mrpa.EFFECTIVE_END_DATE_ADJUSTED
 		,mrpa.EFFECTIVE_END_DATE_ADJUSTED-mrpa.EFFECTIVE_START_DATE_CORRECTED +1 as PRESENCE_CALENDAIRE_AJUSTEE
 		,freeze_date
 from my_real_phase_adjusted mrpa
-inner join PER_ALL_ASSIGNMENTS_F paa on paa.person_id=mrpa.person_id and paa.assignment_type='E' and paa.effective_start_date = (select max(paa2.effective_start_date) from PER_ALL_ASSIGNMENTS_F paa2 where /*Param critère de lancement*/ paa.person_id=paa2.person_id and paa2.assignment_type='E' and paa2.ASSIGNMENT_STATUS_TYPE='ACTIVE' and paa2.effective_start_date<=freeze_date)
+inner join PER_ALL_ASSIGNMENTS_F paa on paa.person_id=mrpa.person_id and paa.ASSIGNMENT_STATUS_TYPE='ACTIVE' and paa.assignment_type='E' and paa.effective_start_date = (select max(paa2.effective_start_date) from PER_ALL_ASSIGNMENTS_F paa2 where  paa.person_id=paa2.person_id and paa2.assignment_type='E' and paa2.ASSIGNMENT_STATUS_TYPE='ACTIVE' and paa2.effective_start_date<=freeze_date and paa2.business_unit_id = '300000001935917' /*Param critère de lancement*/)
+left join CMP_SALARY sal2 on sal2.person_id = paa.person_id and sal2.assignment_id=paa.assignment_id and sal2.date_from = (select max(sal3.date_from) from CMP_SALARY sal3 where sal2.person_id=sal3.person_id and sal2.assignment_id=sal3.assignment_id)
+LEFT JOIN GL_DAILY_RATES DR1 ON DR1.FROM_CURRENCY=mrpa.CURRENCY and DR1.CURRENCY_TO=sal2.CURRENCY_CODE and CONVERSION_TYPE='Corporate' and CONVERSION_DATE = (select max(CONVERSION_DATE) from GL_DAILY_RATES DR2 where DR1.FROM_CURRENCY=DR2.FROM_CURRENCY and DR1.TO_CURRENCY=DR2.TO_CURRENCY and CONVERSION_TYPE='Corporate')
+--CURRENCY = mrpa.CURRENCY
 --and freeze_date between paa.effective_start_date and paa.effective_end_date
-
-
 
 /*
 - Suppression de la phase en cours car au niveau du plan / A FAIRE EN DERNIER
