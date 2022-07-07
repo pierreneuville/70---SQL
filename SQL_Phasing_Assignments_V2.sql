@@ -225,7 +225,7 @@ order by mtaw.effective_start_date, mtaw.effective_end_date),
 
 
 
-effective_end_date_corrected as(
+effective_date_corrected as(
 select 
 	 person_number
 	,person_id
@@ -263,12 +263,13 @@ select
 		WHEN EFFECTIVE_END_DATE is null THEN NEXT_EFF_START_DATE-1
 		ELSE effective_end_date
 	END as effective_end_date_corrected
+	--,pld.freeze_date
 from my_total_assignments_without_duplicate
 left join my_plan_date pld on 1=1
 order by effective_start_date_corrected,effective_end_date_corrected),
 
 my_real_phase as (
-select * from effective_end_date_corrected
+select * from effective_date_corrected
 left join my_plan_date pld on 1=1
 where EFFECTIVE_START_DATE_CORRECTED<actual_termination_date
 and EFFECTIVE_END_DATE_CORRECTED >= pld.start_date),
@@ -279,7 +280,7 @@ select 	a.*
 			WHEN EFFECTIVE_END_DATE_CORRECTED= add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/ THEN add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/
 			WHEN EFFECTIVE_END_DATE_CORRECTED= ADD_MONTHS(TRUNC(start_date, 'YEAR'), 12)-1/24/60/60 /*end_of_year*/ THEN add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/
 			WHEN EFFECTIVE_END_DATE_CORRECTED = ACTUAL_TERMINATION_DATE THEN EFFECTIVE_END_DATE_CORRECTED
-			ELSE LEAD(EFFECTIVE_START_DATE_CORRECTED) OVER (ORDER BY EFFECTIVE_START_DATE_CORRECTED)
+			ELSE LEAD(EFFECTIVE_START_DATE_CORRECTED-1) OVER (ORDER BY EFFECTIVE_START_DATE_CORRECTED)
 		END As EFFECTIVE_END_DATE_ADJUSTED
 from (
 	select 	mrp.* 
@@ -289,30 +290,40 @@ from (
 where PREV_KEY is null
 order by EFFECTIVE_START_DATE_CORRECTED, EFFECTIVE_END_DATE_CORRECTED)
 
-select 	person_number
-		,person_id
-		,last_name
-		,first_name
-		,bu_name
-		,FTE
-		,CONTRACT
-		,department_name
-		,C1_C2_DIR
-		,reason_code
-		,SALARY_AMOUNT
-		,EFFECTIVE_START_DATE_CORRECTED
-		,EFFECTIVE_END_DATE_ADJUSTED
-		,EFFECTIVE_END_DATE_ADJUSTED-EFFECTIVE_START_DATE_CORRECTED +1 as PRESENCE_CALENDAIRE_AJUSTEE
-from my_real_phase_adjusted
+select 	mrpa.person_number
+		,mrpa.person_id
+		,paa.assignment_id
+		--,(select paa.assignment_id from PER_ALL_ASSIGNMENTS_F paa where paa.person_id=mrpa.person_id and rownum<2 and paa.assignment_type='E' and paa.effective_start_date = (select max(paa2.effective_start_date) from PER_ALL_ASSIGNMENTS_F paa2 where /*Param critère de lancement*/ paa.person_id=paa2.person_id and paa2.assignment_type='E' and paa2.ASSIGNMENT_STATUS_TYPE='ACTIVE' and paa2.effective_start_date<=freeze_date))
+		,mrpa.last_name
+		,mrpa.first_name
+		,mrpa.bu_name
+		,mrpa.FTE
+		,mrpa.CONTRACT
+		,mrpa.department_name
+		,mrpa.C1_C2_DIR
+		,mrpa.reason_code
+		,mrpa.SALARY_AMOUNT
+		,mrpa.EFFECTIVE_START_DATE_CORRECTED
+		,mrpa.EFFECTIVE_END_DATE_ADJUSTED
+		,mrpa.EFFECTIVE_END_DATE_ADJUSTED-mrpa.EFFECTIVE_START_DATE_CORRECTED +1 as PRESENCE_CALENDAIRE_AJUSTEE
+		,freeze_date
+from my_real_phase_adjusted mrpa
+inner join PER_ALL_ASSIGNMENTS_F paa on paa.person_id=mrpa.person_id and paa.assignment_type='E' and paa.effective_start_date = (select max(paa2.effective_start_date) from PER_ALL_ASSIGNMENTS_F paa2 where /*Param critère de lancement*/ paa.person_id=paa2.person_id and paa2.assignment_type='E' and paa2.ASSIGNMENT_STATUS_TYPE='ACTIVE' and paa2.effective_start_date<=freeze_date)
+--and freeze_date between paa.effective_start_date and paa.effective_end_date
+
+
 
 /*
 - Suppression de la phase en cours car au niveau du plan / A FAIRE EN DERNIER
-- Ajout des phases en cas de changements de contrats --> Vérifier les règles en vigueur
-- Check vs les règles d'éligibilité et cohérence Fast Formula
+- Ajout des phases en cas de changements de contrats --> DONE
+- Ajout Assignment_ID --> DONE
 - Ajout des phases en cas de passage à population régalienne
 - Ajout des conversions de devises
 - Ajout du taux cible
-- Intégrer l’Assignment N° du collab (ce point j’ai oublié de te le remonter) 
+
+
+Verif
+- Ajout des phases en cas de changements de contrats --> Vérifier les règles en vigueur
 - Retirer de la requête les C1 ayant effectué une Mobilité Intra-Groupe (car cela sera géré au niveau de la double ligne de la feuille de travail)
 */
 
