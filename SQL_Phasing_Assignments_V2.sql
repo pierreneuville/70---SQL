@@ -62,8 +62,8 @@ select 				'ASSIGNMENT'
 				   ,epp.situation as C1_C2_DIR
 				   ,epp_freeze.situation as C1_C2_DIR_FREEZE
 				   ,paa.reason_code
-				   ,sal.SALARY_AMOUNT as CURRENCY
-				   ,sal.CURRENCY_CODE
+				   ,sal.SALARY_AMOUNT
+				   ,sal.CURRENCY_CODE as CURRENCY
 				   ,pps.actual_termination_date
 				   --,'ASSIGNMENT' as ASS_TYPE
 		from PER_ALL_PEOPLE_F paf
@@ -107,8 +107,8 @@ my_assignments_profile as
 					   ,epp.situation as C1_C2_DIR
 					   ,epp_freeze.situation as C1_C2_DIR_FREEZE
 					   ,paa.reason_code
-					   ,sal.SALARY_AMOUNT as CURRENCY
-					   ,sal.CURRENCY_CODE
+					   ,sal.SALARY_AMOUNT
+					   ,sal.CURRENCY_CODE as CURRENCY
 					   ,pps.actual_termination_date
 					  -- ,'PROFILE' as ASS_TYPE
 			from PER_ALL_PEOPLE_F paf
@@ -159,11 +159,11 @@ my_assignments_salary as
 			inner join CMP_SALARY sal on sal.person_id = paf.person_id
 			left join my_plan_date pld on 1=1
 			inner join PER_PERSON_NAMES_F PPN on paf.person_id = ppn.person_id and ppn.name_type='GLOBAL'
-			inner join PER_ALL_ASSIGNMENTS_F paa on paa.person_id = sal.person_id and paa.assignment_id=sal.assignment_id and paa.assignment_type='E'  and sal.date_from between paa.effective_start_date and paa.effective_end_date
+			inner join PER_ALL_ASSIGNMENTS_F paa on paa.person_id = sal.person_id and paa.assignment_type='E'  and sal.date_from between paa.effective_start_date and paa.effective_end_date
 			left join PER_CONTRACTS_F pcf on pcf.person_id=paa.person_id and pcf.contract_id=paa.contract_id
 				left join FND_LOOKUP_VALUES_TL lookup_contract on pcf.type = lookup_contract.lookup_code and lookup_contract.lookup_type = 'CONTRACT_TYPE' and lookup_contract.language = 'F' /*Param*/
 			inner join per_periods_of_service pps on paa.person_id = pps.person_id and paa.period_of_service_id = pps.period_of_service_id
-			left join emp_profiles epp on epp.person_id =paf.person_id and EMP_EFFECTIVE_START_DATE<=paa.effective_start_date
+			left join emp_profiles epp on epp.person_id =paf.person_id and EMP_EFFECTIVE_START_DATE<=sal.DATE_FROM
 			left join emp_profiles epp_freeze on epp_freeze.person_id =paf.person_id and epp_freeze.EMP_EFFECTIVE_START_DATE<= pld.freeze_date
 			left join PER_ALL_ASSIGNMENTS_F paa2 on paa2.person_id = paf.person_id and paa2.assignment_type='E'  and epp.EMP_EFFECTIVE_START_DATE between paa2.effective_start_date and paa2.effective_end_date --and ASSIGNMENT_STATUS_TYPE = 'ACTIVE'
 			left join per_departments pd on paa.organization_id = pd.organization_id
@@ -293,12 +293,17 @@ from (
 			,LAG(person_id||bu_name||FTE||CONTRACT||department_name|| SALARY_AMOUNT || C1_C2_DIR ) OVER (PARTITION BY person_id,bu_name,FTE,CONTRACT,department_name, SALARY_AMOUNT, C1_C2_DIR ORDER BY EFFECTIVE_START_DATE_CORRECTED) As PREV_KEY
 	from my_real_phase mrp) a
 where PREV_KEY is null
-order by EFFECTIVE_START_DATE_CORRECTED, EFFECTIVE_END_DATE_CORRECTED)
+order by EFFECTIVE_START_DATE_CORRECTED, EFFECTIVE_END_DATE_CORRECTED),
 
+last_salary_for_assignment as (
+select person_id, assignment_id, CURRENCY_CODE from CMP_SALARY sal2
+where sal2.date_from = (select max(sal3.date_from) from CMP_SALARY sal3 where sal2.person_id=sal3.person_id and sal2.assignment_id=sal3.assignment_id)
+),
+
+my_real_phase_adjusted_and_last_assignment as (
 select 	mrpa.person_number
 		,mrpa.person_id
 		,paa.assignment_id
-		--,(select paa.assignment_id from PER_ALL_ASSIGNMENTS_F paa where paa.person_id=mrpa.person_id and rownum<2 and paa.assignment_type='E' and paa.effective_start_date = (select max(paa2.effective_start_date) from PER_ALL_ASSIGNMENTS_F paa2 where /*Param critère de lancement*/ paa.person_id=paa2.person_id and paa2.assignment_type='E' and paa2.ASSIGNMENT_STATUS_TYPE='ACTIVE' and paa2.effective_start_date<=freeze_date))
 		,mrpa.last_name
 		,mrpa.first_name
 		,mrpa.bu_name
@@ -309,17 +314,40 @@ select 	mrpa.person_number
 		,mrpa.reason_code
 		,mrpa.SALARY_AMOUNT
 		,mrpa.CURRENCY
-		,sal2.CURRENCY_CODE as LAST_CURRENCY_FOR_ASSIGNMENT
+		,lsfa.CURRENCY_CODE as LAST_CURRENCY_FOR_ASSIGNMENT
+		,CASE 
+			WHEN mrpa.CURRENCY=lsfa.CURRENCY_CODE THEN 1
+			ELSE DR1.CONVERSION_RATE
+		 END as CONVERSION_RATE
 		,mrpa.EFFECTIVE_START_DATE_CORRECTED
 		,mrpa.EFFECTIVE_END_DATE_ADJUSTED
 		,mrpa.EFFECTIVE_END_DATE_ADJUSTED-mrpa.EFFECTIVE_START_DATE_CORRECTED +1 as PRESENCE_CALENDAIRE_AJUSTEE
 		,freeze_date
-from my_real_phase_adjusted mrpa
+from my_real_phase_adjusted mrpa 
 inner join PER_ALL_ASSIGNMENTS_F paa on paa.person_id=mrpa.person_id and paa.ASSIGNMENT_STATUS_TYPE='ACTIVE' and paa.assignment_type='E' and paa.effective_start_date = (select max(paa2.effective_start_date) from PER_ALL_ASSIGNMENTS_F paa2 where  paa.person_id=paa2.person_id and paa2.assignment_type='E' and paa2.ASSIGNMENT_STATUS_TYPE='ACTIVE' and paa2.effective_start_date<=freeze_date and paa2.business_unit_id = '300000001935917' /*Param critère de lancement*/)
-left join CMP_SALARY sal2 on sal2.person_id = paa.person_id and sal2.assignment_id=paa.assignment_id and sal2.date_from = (select max(sal3.date_from) from CMP_SALARY sal3 where sal2.person_id=sal3.person_id and sal2.assignment_id=sal3.assignment_id)
-LEFT JOIN GL_DAILY_RATES DR1 ON DR1.FROM_CURRENCY=mrpa.CURRENCY and DR1.CURRENCY_TO=sal2.CURRENCY_CODE and CONVERSION_TYPE='Corporate' and CONVERSION_DATE = (select max(CONVERSION_DATE) from GL_DAILY_RATES DR2 where DR1.FROM_CURRENCY=DR2.FROM_CURRENCY and DR1.TO_CURRENCY=DR2.TO_CURRENCY and CONVERSION_TYPE='Corporate')
---CURRENCY = mrpa.CURRENCY
---and freeze_date between paa.effective_start_date and paa.effective_end_date
+left join last_salary_for_assignment lsfa on paa.person_id=lsfa.person_id and paa.assignment_id=lsfa.assignment_id
+left join GL_DAILY_RATES DR1 ON DR1.FROM_CURRENCY=mrpa.CURRENCY and DR1.TO_CURRENCY=lsfa.CURRENCY_CODE and CONVERSION_TYPE='Corporate' and DR1.CONVERSION_DATE = paa.effective_start_date
+)
+
+select  
+		mrpala.person_number
+		,mrpala.person_id
+		,mrpala.assignment_id
+		,mrpala.last_name
+		,mrpala.first_name
+		,mrpala.bu_name
+		,mrpala.FTE
+		,mrpala.CONTRACT
+		,mrpala.department_name
+		,mrpala.C1_C2_DIR
+		,mrpala.reason_code
+		,mrpala.SALARY_AMOUNT*mrpala.CONVERSION_RATE as SALARY_AMOUNT_CONVERTED
+		,mrpala.LAST_CURRENCY_FOR_ASSIGNMENT
+		,mrpala.EFFECTIVE_START_DATE_CORRECTED
+		,mrpala.EFFECTIVE_END_DATE_ADJUSTED
+		,mrpala.EFFECTIVE_END_DATE_ADJUSTED-mrpala.EFFECTIVE_START_DATE_CORRECTED +1 as PRESENCE_CALENDAIRE_AJUSTEE
+		,mrpala.freeze_date
+FROM my_real_phase_adjusted_and_last_assignment mrpala
 
 /*
 - Suppression de la phase en cours car au niveau du plan / A FAIRE EN DERNIER
