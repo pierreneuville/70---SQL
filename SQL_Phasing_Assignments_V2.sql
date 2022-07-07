@@ -353,9 +353,12 @@ FROM my_real_phase_adjusted_and_last_assignment mrpala
 - Suppression de la phase en cours car au niveau du plan / A FAIRE EN DERNIER
 - Ajout des phases en cas de changements de contrats --> DONE
 - Ajout Assignment_ID --> DONE
+- Ajout des conversions de devises --> DONE
 - Ajout des phases en cas de passage à population régalienne
-- Ajout des conversions de devises
 - Ajout du taux cible
+- Ajouter le cas du C2 qui passe C1 KL100011573_P0
+- Ajouter le cas du Tout Collab à C2  KL100011585_P0
+- Cas d'un collab sans phase > pas de ligne apparente dans la query KL100011584_P0
 
 
 Verif
