@@ -9,41 +9,51 @@ from cmp_plans_b cmp_plan
 inner join cmp_plan_periods cmp_period on cmp_plan.plan_id = cmp_period.plan_id
 inner join cmp_plans_tl cpm_lang on cmp_plan.plan_id = cpm_lang.plan_id and cpm_lang.LANGUAGE = 'US' /*param*/
 where 1=1
-and plan_name ='CASA - Campagne Salariale (PNE)' /*param*/
-and period_name='CASAES - 2022' /*param*/
+and plan_name = NVL(:plan_name_param, 'CASA - Campagne Salariale (PNE)') /*param*/
+and period_name= NVL(:plan_cycle_param, 'CASAES - 2022') /*param*/
 order by 1),
 
 
 emp_profiles as (
-	select 
-		paf.person_id
-		,CASE
-			WHEN HPI.ATTRIBUTE_DATE2>=HPI.ATTRIBUTE_DATE1 AND HPI.ATTRIBUTE_DATE2<=freeze_date THEN HPI.ATTRIBUTE2
-			WHEN HPI.ATTRIBUTE_DATE1>HPI.ATTRIBUTE_DATE2 AND HPI.ATTRIBUTE_DATE2<=freeze_date THEN HPI.ATTRIBUTE2
-			WHEN HPI.ATTRIBUTE_DATE1 is null and HPI.ATTRIBUTE_DATE2<=freeze_date THEN HPI.ATTRIBUTE2
-			WHEN HPI.ATTRIBUTE_DATE2 is null and HPI.ATTRIBUTE_DATE1<=freeze_date THEN HPI.ATTRIBUTE1 
-		END "SITUATION"
-		,CASE
-			WHEN HPI.ATTRIBUTE_DATE2>=HPI.ATTRIBUTE_DATE1 AND HPI.ATTRIBUTE_DATE2<=freeze_date THEN HPI.ATTRIBUTE_DATE2
-			WHEN HPI.ATTRIBUTE_DATE1>HPI.ATTRIBUTE_DATE2 AND HPI.ATTRIBUTE_DATE2<=freeze_date THEN HPI.ATTRIBUTE_DATE2
-			WHEN HPI.ATTRIBUTE_DATE1 is null and HPI.ATTRIBUTE_DATE2<=freeze_date THEN HPI.ATTRIBUTE_DATE2
-			WHEN HPI.ATTRIBUTE_DATE2 is null and HPI.ATTRIBUTE_DATE1<=freeze_date THEN HPI.ATTRIBUTE_DATE1 
-		END "EMP_EFFECTIVE_START_DATE"
-	FROM
-	HRT_PROFILES_B HPB,
-	HRT_PROFILE_ITEMS HPI,
-	HRT_CONTENT_TYPES_TL CT,
-	per_all_people_f paf,
-	my_plan_date pld
-	WHERE 1=1
-	and paf.person_id= HPB.person_id
-	and HPB.PROFILE_ID=HPI.PROFILE_ID
-	and HPI.CONTENT_TYPE_ID=CT.CONTENT_TYPE_ID
-	and CT.language='F' /*param*/
-	and HPI.SECTION_ID='300000003197644' /*param à vérifier lors de la migration d'environnements*/
-	and paf.person_number like (:Person_number_param) /*param*/
-	and ((HPI.ATTRIBUTE_DATE2 is not null) or (HPI.ATTRIBUTE_DATE1 is not null))
-	and ((HPI.ATTRIBUTE2 is not null) or (HPI.ATTRIBUTE1 is not null))
+	select
+		person_id
+		,SITUATION
+		,EMP_EFFECTIVE_START_DATE
+		,CASE 
+			WHEN LAST_VALUE(EMP_EFFECTIVE_START_DATE) OVER (PARTITION BY person_id ORDER BY EMP_EFFECTIVE_START_DATE ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) = EMP_EFFECTIVE_START_DATE THEN 'Y' 
+			ELSE 'N'
+		END AS last_situation
+	from(
+		select 
+			paf.person_id
+			,CASE
+				WHEN HPI.ATTRIBUTE_DATE2>=HPI.ATTRIBUTE_DATE1 AND HPI.ATTRIBUTE_DATE2<=freeze_date THEN HPI.ATTRIBUTE2
+				WHEN HPI.ATTRIBUTE_DATE1>HPI.ATTRIBUTE_DATE2 AND HPI.ATTRIBUTE_DATE2<=freeze_date THEN HPI.ATTRIBUTE2
+				WHEN HPI.ATTRIBUTE_DATE1 is null and HPI.ATTRIBUTE_DATE2<=freeze_date THEN HPI.ATTRIBUTE2
+				WHEN HPI.ATTRIBUTE_DATE2 is null and HPI.ATTRIBUTE_DATE1<=freeze_date THEN HPI.ATTRIBUTE1 
+			END "SITUATION"
+			,CASE
+				WHEN HPI.ATTRIBUTE_DATE2>=HPI.ATTRIBUTE_DATE1 AND HPI.ATTRIBUTE_DATE2<=freeze_date THEN HPI.ATTRIBUTE_DATE2
+				WHEN HPI.ATTRIBUTE_DATE1>HPI.ATTRIBUTE_DATE2 AND HPI.ATTRIBUTE_DATE2<=freeze_date THEN HPI.ATTRIBUTE_DATE2
+				WHEN HPI.ATTRIBUTE_DATE1 is null and HPI.ATTRIBUTE_DATE2<=freeze_date THEN HPI.ATTRIBUTE_DATE2
+				WHEN HPI.ATTRIBUTE_DATE2 is null and HPI.ATTRIBUTE_DATE1<=freeze_date THEN HPI.ATTRIBUTE_DATE1 
+			END "EMP_EFFECTIVE_START_DATE"
+		FROM
+		HRT_PROFILES_B HPB,
+		HRT_PROFILE_ITEMS HPI,
+		HRT_CONTENT_TYPES_TL CT,
+		per_all_people_f paf,
+		my_plan_date pld
+		WHERE 1=1
+		and paf.person_id= HPB.person_id
+		and HPB.PROFILE_ID=HPI.PROFILE_ID
+		and HPI.CONTENT_TYPE_ID=CT.CONTENT_TYPE_ID
+		and CT.language='F' /*param*/
+		and HPI.SECTION_ID='300000003197644' /*param à vérifier lors de la migration d'environnements*/
+		and paf.person_number like (:Person_number_param) /*param*/
+		and ((HPI.ATTRIBUTE_DATE2 is not null) or (HPI.ATTRIBUTE_DATE1 is not null))
+		and ((HPI.ATTRIBUTE2 is not null) or (HPI.ATTRIBUTE1 is not null))
+		) emp
 ),
 
 my_assignments as (
@@ -53,7 +63,6 @@ select 				'ASSIGNMENT'
 				   ,ppn.last_name
 				   ,ppn.first_name
 				   ,paa.effective_start_date
-				   --,FIRST_VALUE(paa.effective_start_date) OVER (PARTITION BY paf.person_id,fabu.bu_name,PAMMF.Value,pd.name, paa.ASSIGNMENT_STATUS_TYPE ORDER BY paf.person_id, paa.effective_start_date) AS first_eff_date
 				   ,paa.effective_end_date
 				   ,fabu.bu_name
 				   ,PAMMF.Value	"FTE"
@@ -67,11 +76,11 @@ select 				'ASSIGNMENT'
 				   ,pps.actual_termination_date
 				   --,'ASSIGNMENT' as ASS_TYPE
 		from PER_ALL_PEOPLE_F paf
-		inner join PER_ALL_ASSIGNMENTS_F paa on paa.person_id = paf.person_id and assignment_type='E' --and ASSIGNMENT_STATUS_TYPE = 'ACTIVE'
+		inner join PER_ALL_ASSIGNMENTS_F paa on paa.person_id = paf.person_id and assignment_type='E'
 		inner join per_periods_of_service pps on paa.person_id = pps.person_id and paa.period_of_service_id = pps.period_of_service_id
 		left join my_plan_date pld on 1=1
 		left join emp_profiles epp on epp.person_id =paf.person_id and epp.EMP_EFFECTIVE_START_DATE<=paa.effective_start_date
-		left join emp_profiles epp_freeze on epp_freeze.person_id =paf.person_id and epp_freeze.EMP_EFFECTIVE_START_DATE<= pld.freeze_date
+		left join emp_profiles epp_freeze on epp_freeze.person_id =paf.person_id and epp_freeze.EMP_EFFECTIVE_START_DATE<= pld.freeze_date and epp_freeze.last_situation='Y'
 		left join PER_CONTRACTS_F pcf on pcf.person_id=paa.person_id and pcf.contract_id=paa.contract_id
 			left join FND_LOOKUP_VALUES_TL lookup_contract on pcf.type = lookup_contract.lookup_code and lookup_contract.lookup_type = 'CONTRACT_TYPE' and lookup_contract.language = 'F' /*Param*/
 		left join CMP_SALARY sal on sal.person_id = paa.person_id and sal.assignment_id=paa.assignment_id and sal.date_from<=paa.effective_start_date --between  and sal.date_to
@@ -118,7 +127,7 @@ my_assignments_profile as
 			inner join PER_ALL_ASSIGNMENTS_F paa on paa.person_id = paf.person_id and assignment_type='E'  and epp.EMP_EFFECTIVE_START_DATE between paa.effective_start_date and paa.effective_end_date --and ASSIGNMENT_STATUS_TYPE = 'ACTIVE'
 			left join PER_CONTRACTS_F pcf on pcf.person_id=paa.person_id and pcf.contract_id=paa.contract_id
 			left join FND_LOOKUP_VALUES_TL lookup_contract on pcf.type = lookup_contract.lookup_code and lookup_contract.lookup_type = 'CONTRACT_TYPE' and lookup_contract.language = 'F' /*Param*/
-			left join emp_profiles epp_freeze on epp_freeze.person_id =paf.person_id and epp_freeze.EMP_EFFECTIVE_START_DATE<= pld.freeze_date
+			left join emp_profiles epp_freeze on epp_freeze.person_id =paf.person_id and epp_freeze.EMP_EFFECTIVE_START_DATE<= pld.freeze_date and epp_freeze.last_situation='Y'
 			inner join per_periods_of_service pps on paa.person_id = pps.person_id and paa.period_of_service_id = pps.period_of_service_id
 			left join CMP_SALARY sal on sal.person_id = paa.person_id and sal.assignment_id=paa.assignment_id and epp.EMP_EFFECTIVE_START_DATE between sal.date_from and sal.date_to
 			left join per_departments pd on paa.organization_id = pd.organization_id
@@ -164,7 +173,7 @@ my_assignments_salary as
 				left join FND_LOOKUP_VALUES_TL lookup_contract on pcf.type = lookup_contract.lookup_code and lookup_contract.lookup_type = 'CONTRACT_TYPE' and lookup_contract.language = 'F' /*Param*/
 			inner join per_periods_of_service pps on paa.person_id = pps.person_id and paa.period_of_service_id = pps.period_of_service_id
 			left join emp_profiles epp on epp.person_id =paf.person_id and EMP_EFFECTIVE_START_DATE<=sal.DATE_FROM
-			left join emp_profiles epp_freeze on epp_freeze.person_id =paf.person_id and epp_freeze.EMP_EFFECTIVE_START_DATE<= pld.freeze_date
+			left join emp_profiles epp_freeze on epp_freeze.person_id =paf.person_id and epp_freeze.EMP_EFFECTIVE_START_DATE<= pld.freeze_date and epp_freeze.last_situation='Y'
 			left join PER_ALL_ASSIGNMENTS_F paa2 on paa2.person_id = paf.person_id and paa2.assignment_type='E'  and epp.EMP_EFFECTIVE_START_DATE between paa2.effective_start_date and paa2.effective_end_date --and ASSIGNMENT_STATUS_TYPE = 'ACTIVE'
 			left join per_departments pd on paa.organization_id = pd.organization_id
 			left join FUN_ALL_BUSINESS_UNITS_V fabu on paa.BUSINESS_UNIT_ID = fabu.BU_ID
@@ -223,7 +232,12 @@ select 			    mtaw.person_number
 		from my_total_assignments_wrk mtaw
 		left join my_plan_date pld on 1=1
 where 1=1
-and not (mtaw.effective_start_date=mtaw.prev_eff_start_date_mtaw and mtaw.effective_end_date= mtaw.next_eff_end_date_mtaw)
+and not (
+			mtaw.effective_start_date=mtaw.prev_eff_start_date_mtaw 
+		and mtaw.effective_end_date= mtaw.next_eff_end_date_mtaw
+		and mtaw.prev_eff_start_date_mtaw is not null
+		and mtaw.next_eff_end_date_mtaw is not null
+		)
 and  mtaw.effective_end_date >= pld.start_date
 order by mtaw.effective_start_date, mtaw.effective_end_date),
 
@@ -284,7 +298,8 @@ select 	a.*
 		,CASE
 			WHEN EFFECTIVE_END_DATE_CORRECTED= add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/ THEN add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/
 			WHEN EFFECTIVE_END_DATE_CORRECTED= ADD_MONTHS(TRUNC(start_date, 'YEAR'), 12)-1/24/60/60 /*end_of_year*/ THEN add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/
-			WHEN EFFECTIVE_END_DATE_CORRECTED = ACTUAL_TERMINATION_DATE THEN EFFECTIVE_END_DATE_CORRECTED
+			WHEN EFFECTIVE_END_DATE_CORRECTED = ACTUAL_TERMINATION_DATE AND C1_C2_DIR is not null THEN EFFECTIVE_END_DATE_CORRECTED
+			WHEN EFFECTIVE_END_DATE_CORRECTED = ACTUAL_TERMINATION_DATE AND C1_C2_DIR is null THEN add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/
 			ELSE LEAD(EFFECTIVE_START_DATE_CORRECTED-1) OVER (ORDER BY EFFECTIVE_START_DATE_CORRECTED)
 		END As EFFECTIVE_END_DATE_ADJUSTED
 from (
@@ -357,9 +372,9 @@ FROM my_real_phase_adjusted_and_last_assignment mrpala
 - Ajout des conversions de devises --> DONE
 - Ajout des phases en cas de passage à population régalienne
 - Ajout du taux cible
-- Ajouter le cas du C2 qui passe C1 KL100011573_P0
-- Ajouter le cas du Tout Collab à C2  KL100011585_P0
-- Cas d'un collab sans phase > pas de ligne apparente dans la query KL100011584_P0
+- Ajouter le cas du C2 qui passe C1 KL100011573_P0 --> DONE
+- Ajouter le cas du Tout Collab à C2  KL100011585_P0 --> DONE
+- Cas d'un collab sans phase > pas de ligne apparente dans la query KL100011584_P0 --> DONE
 
 
 Verif
