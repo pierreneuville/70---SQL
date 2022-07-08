@@ -116,6 +116,7 @@ my_assignments_profile as
 					   ,epp.situation as C1_C2_DIR
 					   ,epp_freeze.situation as C1_C2_DIR_FREEZE
 					   ,paa.reason_code
+					   ,PEEVF.SCREEN_ENTRY_VALUE
 					   ,sal.SALARY_AMOUNT
 					   ,sal.CURRENCY_CODE as CURRENCY
 					   ,pps.actual_termination_date
@@ -134,6 +135,10 @@ my_assignments_profile as
 			left join FUN_ALL_BUSINESS_UNITS_V fabu on paa.BUSINESS_UNIT_ID = fabu.BU_ID
 			left join PER_ASSIGN_WORK_MEASURES_F PAMMF on paa.assignment_id = PAMMF.assignment_id and PAMMF.unit = 'FTE' and paa.effective_start_date between PAMMF.effective_start_date and PAMMF.effective_end_date
 			left join HR_LOCATIONS_ALL hla on paa.location_id = hla.location_id
+			inner join PAY_ELEMENT_ENTRIES_F peef on paf.person_id = peef.person_id and sysdate between peef.effective_start_date and peef.effective_end_date
+			inner join PAY_ELEMENT_ENTRY_VALUES_F peevf on peef.ELEMENT_ENTRY_ID = peevf.ELEMENT_ENTRY_ID and epp.EMP_EFFECTIVE_START_DATE between peevf.effective_start_date and peevf.effective_end_date
+			inner JOIN PAY_INPUT_VALUES_F PIV ON PEEVf.INPUT_VALUE_ID = PIV.INPUT_VALUE_ID and PIV.BASE_NAME = 'Percentage'
+			INNER JOIN PAY_ELEMENT_TYPES_F PETF ON PETF.ELEMENT_TYPE_ID = PEEF.ELEMENT_TYPE_ID and PETF.BASE_ELEMENT_NAME in ('FRA_Bonus cible %')/*To be adapted*/
 			where 1=1 
 			and pld.freeze_date between ppn.effective_start_date and ppn.effective_end_date
 			and pld.freeze_date between pd.effective_start_date and pd.effective_end_date
@@ -160,6 +165,7 @@ my_assignments_salary as
 					   ,epp.situation as C1_C2_DIR
 					   ,epp_freeze.situation as C1_C2_DIR_FREEZE
 					   ,sal.SALARY_REASON_CODE
+					   ,PEEVF.SCREEN_ENTRY_VALUE
 					   ,sal.SALARY_AMOUNT
 					   ,sal.CURRENCY_CODE as CURRENCY
 					   ,pps.actual_termination_date
@@ -179,6 +185,10 @@ my_assignments_salary as
 			left join FUN_ALL_BUSINESS_UNITS_V fabu on paa.BUSINESS_UNIT_ID = fabu.BU_ID
 			left join PER_ASSIGN_WORK_MEASURES_F PAMMF on paa.assignment_id = PAMMF.assignment_id and PAMMF.unit = 'FTE' and paa.effective_start_date between PAMMF.effective_start_date and PAMMF.effective_end_date
 			left join HR_LOCATIONS_ALL hla on paa.location_id = hla.location_id
+			inner join PAY_ELEMENT_ENTRIES_F peef on paf.person_id = peef.person_id and sysdate between peef.effective_start_date and peef.effective_end_date
+			inner join PAY_ELEMENT_ENTRY_VALUES_F peevf on peef.ELEMENT_ENTRY_ID = peevf.ELEMENT_ENTRY_ID and sal.date_from between peevf.effective_start_date and peevf.effective_end_date
+			inner JOIN PAY_INPUT_VALUES_F PIV ON PEEVf.INPUT_VALUE_ID = PIV.INPUT_VALUE_ID and PIV.BASE_NAME = 'Percentage'
+			INNER JOIN PAY_ELEMENT_TYPES_F PETF ON PETF.ELEMENT_TYPE_ID = PEEF.ELEMENT_TYPE_ID and PETF.BASE_ELEMENT_NAME in ('FRA_Bonus cible %')/*To be adapted*/
 			where 1=1 
 			and pld.freeze_date between ppn.effective_start_date and ppn.effective_end_date
 			and pld.freeze_date between pd.effective_start_date and pd.effective_end_date
@@ -190,52 +200,53 @@ my_assignments_salary as
 
 my_assignments_elements as
 (
-			select 'ELEMENT'
-				   ,paf.person_number
-				   ,paf.person_id
-				   ,ppn.last_name
-				   ,ppn.first_name
-				   ,peev.effective_start_date as effective_start_date
-				   ,peev.effective_end_date as effective_end_date
-				   ,fabu.bu_name
-				   ,PAMMF.Value	"FTE"
-				   ,pd.name as department_name
-				   ,epp.situation as C1_C2_DIR
-				   ,epp_freeze.situation as C1_C2_DIR_FREEZE
-				   ,'ELEMENT_REASON' as ELEMENT_REASON
-				   ,PEEV.SCREEN_ENTRY_VALUE
-				   ,pps.actual_termination_date
-				   -- ,'ELEMENT' as ASS_TYPE
+	select 'ELEMENT'
+		   ,paf.person_number
+		   ,paf.person_id
+		   ,ppn.last_name
+		   ,ppn.first_name
+		   ,peevf.effective_start_date as effective_start_date
+		   ,peevf.effective_end_date as effective_end_date
+		   ,fabu.bu_name
+		   ,PAMMF.Value	"FTE"
+		   ,pd.name as department_name
+		   ,lookup_contract.meaning "CONTRACT"
+		   ,epp.situation as C1_C2_DIR
+		   ,epp_freeze.situation as C1_C2_DIR_FREEZE
+		   ,'ELEMENT_REASON' as ELEMENT_REASON
+		   ,PEEVf.SCREEN_ENTRY_VALUE
+		   ,sal.SALARY_AMOUNT
+		   ,sal.CURRENCY_CODE as CURRENCY
+		   ,pps.actual_termination_date
+		-- ,'ELEMENT' as ASS_TYPE
 			from PER_ALL_PEOPLE_F paf
 			inner join PER_ALL_ASSIGNMENTS_F paa on paa.person_id = paf.person_id and paa.assignment_type='E'  
-			inner join pay_rel_groups_dn prg on paa.assignment_id = prg.assignment_id and sysdate between prg.start_date and prg.end_date
-			left join pay_entry_usages peu on prg.RELATIONSHIP_GROUP_ID = peu.payroll_assignment_id
-			left join pay_element_entry_values_f peev on peu.element_entry_id = peev.element_entry_id
-				inner JOIN PAY_INPUT_VALUES_F PIV ON PEEV.INPUT_VALUE_ID = PIV.INPUT_VALUE_ID and PIV.BASE_NAME = 'Percentage'
-			left join pay_element_entries_f peef on peu.element_entry_id = peef.element_entry_id
-			left join pay_element_types_tl pet on peef.element_type_id = pet.element_type_id and pet.language = 'F'/*parameter*/
-			INNER JOIN PAY_ELEMENT_TYPES_F PETF ON PETF.ELEMENT_TYPE_ID = PEEF.ELEMENT_TYPE_ID AND PETF.ELEMENT_TYPE_ID NOT IN (SELECT ELEMENT_TYPE_ID FROM CMP_SALARY_BASES) and PETF.BASE_ELEMENT_NAME in ('FRA_Bonus cible %')/*To be adapted*/			
+			inner join PAY_ELEMENT_ENTRIES_F peef on paf.person_id = peef.person_id and sysdate between peef.effective_start_date and peef.effective_end_date
+			inner join PAY_ELEMENT_ENTRY_VALUES_F peevf on peef.ELEMENT_ENTRY_ID = peevf.ELEMENT_ENTRY_ID
+			inner JOIN PAY_INPUT_VALUES_F PIV ON PEEVf.INPUT_VALUE_ID = PIV.INPUT_VALUE_ID and PIV.BASE_NAME = 'Percentage'
+			INNER JOIN PAY_ELEMENT_TYPES_F PETF ON PETF.ELEMENT_TYPE_ID = PEEF.ELEMENT_TYPE_ID and PETF.BASE_ELEMENT_NAME in ('FRA_Bonus cible %')/*To be adapted*/
 			left join my_plan_date pld on 1=1
 			inner join PER_PERSON_NAMES_F PPN on paf.person_id = ppn.person_id and ppn.name_type='GLOBAL'
 			left join PER_CONTRACTS_F pcf on pcf.person_id=paa.person_id and pcf.contract_id=paa.contract_id
 				left join FND_LOOKUP_VALUES_TL lookup_contract on pcf.type = lookup_contract.lookup_code and lookup_contract.lookup_type = 'CONTRACT_TYPE' and lookup_contract.language = 'F' /*Param*/
 			inner join per_periods_of_service pps on paa.person_id = pps.person_id and paa.period_of_service_id = pps.period_of_service_id
-			left join emp_profiles epp on epp.person_id =paf.person_id and EMP_EFFECTIVE_START_DATE<=peev.effective_start_date
+			left join emp_profiles epp on epp.person_id =paf.person_id and EMP_EFFECTIVE_START_DATE<=peevf.effective_start_date
 			left join emp_profiles epp_freeze on epp_freeze.person_id =paf.person_id and epp_freeze.EMP_EFFECTIVE_START_DATE<= pld.freeze_date and epp_freeze.last_situation='Y'
 			left join PER_ALL_ASSIGNMENTS_F paa2 on paa2.person_id = paf.person_id and paa2.assignment_type='E'  and epp.EMP_EFFECTIVE_START_DATE between paa2.effective_start_date and paa2.effective_end_date --and ASSIGNMENT_STATUS_TYPE = 'ACTIVE'
 			left join per_departments pd on paa.organization_id = pd.organization_id
 			left join FUN_ALL_BUSINESS_UNITS_V fabu on paa.BUSINESS_UNIT_ID = fabu.BU_ID
 			left join PER_ASSIGN_WORK_MEASURES_F PAMMF on paa.assignment_id = PAMMF.assignment_id and PAMMF.unit = 'FTE' and paa.effective_start_date between PAMMF.effective_start_date and PAMMF.effective_end_date
 			left join HR_LOCATIONS_ALL hla on paa.location_id = hla.location_id
+			left join CMP_SALARY sal on sal.person_id = paa.person_id and sal.assignment_id=paa.assignment_id and peevf.effective_start_date between sal.date_from and sal.date_to
 			where 1=1 
-			and peev.effective_start_date between paa.effective_start_date and paa.effective_end_date
+			and peevf.effective_start_date between paa.effective_start_date and paa.effective_end_date
 			and pld.freeze_date between ppn.effective_start_date and ppn.effective_end_date
 			and pld.freeze_date between pd.effective_start_date and pd.effective_end_date
 			and pld.freeze_date between paf.effective_start_date and paf.effective_end_date
 					and pld.freeze_date between pcf.effective_start_date and pcf.effective_end_date
 			and paf.person_number like (:Person_number_param) /*param*/
 			/*and fabu.bu_name = 'CASA ES' param*/
-),
+)
 
 my_total_assignments as(
 select * from my_assignments
@@ -426,6 +437,10 @@ FROM my_real_phase_adjusted_and_last_assignment mrpala
 - Ajouter le cas du C2 qui passe C1 KL100011573_P0 --> DONE
 - Ajouter le cas du Tout Collab à C2  KL100011585_P0 --> DONE
 - Cas d'un collab sans phase > pas de ligne apparente dans la query KL100011584_P0 --> DONE
+- Ajout target bonus split --> DONE
+- Ajout target bonus dans salaire --> DONE
+- Ajout target bonus dans profile --> DONE mais sans test je n'ai pas le jdd
+- Ajout target bonus dans assignment --> to do 
 
 
 Verif
