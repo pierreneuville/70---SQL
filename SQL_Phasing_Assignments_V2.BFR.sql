@@ -138,7 +138,7 @@ my_assignments_profile as
 			inner join PAY_ELEMENT_ENTRIES_F peef on paf.person_id = peef.person_id and sysdate between peef.effective_start_date and peef.effective_end_date
 			inner join PAY_ELEMENT_ENTRY_VALUES_F peevf on peef.ELEMENT_ENTRY_ID = peevf.ELEMENT_ENTRY_ID and epp.EMP_EFFECTIVE_START_DATE between peevf.effective_start_date and peevf.effective_end_date
 			inner JOIN PAY_INPUT_VALUES_F PIV ON PEEVf.INPUT_VALUE_ID = PIV.INPUT_VALUE_ID and PIV.BASE_NAME = 'Percentage'
-			INNER JOIN PAY_ELEMENT_TYPES_F PETF ON PETF.ELEMENT_TYPE_ID = PEEF.ELEMENT_TYPE_ID and PETF.BASE_ELEMENT_NAME in ('FRA_Bonus cible %')/*To be adapted*/
+			INNER JOIN PAY_ELEMENT_TYPES_F PETF ON PETF.ELEMENT_TYPE_ID = PEEF.ELEMENT_TYPE_ID and PETF.BASE_ELEMENT_NAME in ('FRA_Bonus cible %')/*Param*/
 			where 1=1 
 			and pld.freeze_date between ppn.effective_start_date and ppn.effective_end_date
 			and pld.freeze_date between pd.effective_start_date and pd.effective_end_date
@@ -188,7 +188,7 @@ my_assignments_salary as
 			inner join PAY_ELEMENT_ENTRIES_F peef on paf.person_id = peef.person_id and sysdate between peef.effective_start_date and peef.effective_end_date
 			inner join PAY_ELEMENT_ENTRY_VALUES_F peevf on peef.ELEMENT_ENTRY_ID = peevf.ELEMENT_ENTRY_ID and sal.date_from between peevf.effective_start_date and peevf.effective_end_date
 			inner JOIN PAY_INPUT_VALUES_F PIV ON PEEVf.INPUT_VALUE_ID = PIV.INPUT_VALUE_ID and PIV.BASE_NAME = 'Percentage'
-			INNER JOIN PAY_ELEMENT_TYPES_F PETF ON PETF.ELEMENT_TYPE_ID = PEEF.ELEMENT_TYPE_ID and PETF.BASE_ELEMENT_NAME in ('FRA_Bonus cible %')/*To be adapted*/
+			INNER JOIN PAY_ELEMENT_TYPES_F PETF ON PETF.ELEMENT_TYPE_ID = PEEF.ELEMENT_TYPE_ID and PETF.BASE_ELEMENT_NAME in ('FRA_Bonus cible %')/*Param*/
 			where 1=1 
 			and pld.freeze_date between ppn.effective_start_date and ppn.effective_end_date
 			and pld.freeze_date between pd.effective_start_date and pd.effective_end_date
@@ -224,7 +224,7 @@ my_assignments_elements as
 			inner join PAY_ELEMENT_ENTRIES_F peef on paf.person_id = peef.person_id and sysdate between peef.effective_start_date and peef.effective_end_date
 			inner join PAY_ELEMENT_ENTRY_VALUES_F peevf on peef.ELEMENT_ENTRY_ID = peevf.ELEMENT_ENTRY_ID
 			inner JOIN PAY_INPUT_VALUES_F PIV ON PEEVf.INPUT_VALUE_ID = PIV.INPUT_VALUE_ID and PIV.BASE_NAME = 'Percentage'
-			INNER JOIN PAY_ELEMENT_TYPES_F PETF ON PETF.ELEMENT_TYPE_ID = PEEF.ELEMENT_TYPE_ID and PETF.BASE_ELEMENT_NAME in ('FRA_Bonus cible %')/*To be adapted*/
+			INNER JOIN PAY_ELEMENT_TYPES_F PETF ON PETF.ELEMENT_TYPE_ID = PEEF.ELEMENT_TYPE_ID and PETF.BASE_ELEMENT_NAME in ('FRA_Bonus cible %')/*Param*/
 			left join my_plan_date pld on 1=1
 			inner join PER_PERSON_NAMES_F PPN on paf.person_id = ppn.person_id and ppn.name_type='GLOBAL'
 			left join PER_CONTRACTS_F pcf on pcf.person_id=paa.person_id and pcf.contract_id=paa.contract_id
