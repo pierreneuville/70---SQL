@@ -71,6 +71,7 @@ select 				'ASSIGNMENT'
 				   ,epp.situation as C1_C2_DIR
 				   ,epp_freeze.situation as C1_C2_DIR_FREEZE
 				   ,paa.reason_code
+				   ,PEEVF.SCREEN_ENTRY_VALUE
 				   ,sal.SALARY_AMOUNT
 				   ,sal.CURRENCY_CODE as CURRENCY
 				   ,pps.actual_termination_date
@@ -89,6 +90,10 @@ select 				'ASSIGNMENT'
 		left join FUN_ALL_BUSINESS_UNITS_V fabu on paa.BUSINESS_UNIT_ID = fabu.BU_ID
 		left join PER_ASSIGN_WORK_MEASURES_F PAMMF on paa.assignment_id = PAMMF.assignment_id and PAMMF.unit = 'FTE' and paa.effective_start_date between PAMMF.effective_start_date and PAMMF.effective_end_date
 		left join HR_LOCATIONS_ALL hla on paa.location_id = hla.location_id
+		inner join PAY_ELEMENT_ENTRIES_F peef on paf.person_id = peef.person_id and sysdate between peef.effective_start_date and peef.effective_end_date
+		inner join PAY_ELEMENT_ENTRY_VALUES_F peevf on peef.ELEMENT_ENTRY_ID = peevf.ELEMENT_ENTRY_ID and paa.effective_start_date between peevf.effective_start_date and peevf.effective_end_date
+		inner JOIN PAY_INPUT_VALUES_F PIV ON PEEVf.INPUT_VALUE_ID = PIV.INPUT_VALUE_ID and PIV.BASE_NAME = 'Percentage'
+		INNER JOIN PAY_ELEMENT_TYPES_F PETF ON PETF.ELEMENT_TYPE_ID = PEEF.ELEMENT_TYPE_ID and PETF.BASE_ELEMENT_NAME in ('FRA_Bonus cible %')/*Param*/
 		where 1=1 
 		and pld.freeze_date between ppn.effective_start_date and ppn.effective_end_date
 		and pld.freeze_date between pd.effective_start_date and pd.effective_end_date
@@ -246,7 +251,7 @@ my_assignments_elements as
 					and pld.freeze_date between pcf.effective_start_date and pcf.effective_end_date
 			and paf.person_number like (:Person_number_param) /*param*/
 			/*and fabu.bu_name = 'CASA ES' param*/
-)
+),
 
 my_total_assignments as(
 select * from my_assignments
@@ -440,7 +445,7 @@ FROM my_real_phase_adjusted_and_last_assignment mrpala
 - Ajout target bonus split --> DONE
 - Ajout target bonus dans salaire --> DONE
 - Ajout target bonus dans profile --> DONE mais sans test je n'ai pas le jdd
-- Ajout target bonus dans assignment --> to do 
+- Ajout target bonus dans assignment --> DONE
 
 
 Verif
