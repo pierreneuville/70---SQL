@@ -9,10 +9,18 @@ from cmp_plans_b cmp_plan
 inner join cmp_plan_periods cmp_period on cmp_plan.plan_id = cmp_period.plan_id
 inner join cmp_plans_tl cpm_lang on cmp_plan.plan_id = cpm_lang.plan_id and cpm_lang.LANGUAGE = 'US' /*param*/
 where 1=1
-and plan_name ='Pilot Plan V.4 - Assignment Segment v2' /*param*/
-and period_name='Plan - 2022' /*param*/
+and plan_name =NVL(:plan_name_param, 'CASA - Campagne Salariale (PNE)') /*param*/
+and period_name=NVL(:plan_cycle_param, 'CASAES - 2022') /*param*/
 order by 1),
 
+mes_critères_de_lancement AS (
+select distinct paf.person_id, paa.assignment_id
+	from per_all_people_f paf
+	inner join PER_ALL_ASSIGNMENTS_F paa on paf.person_id=paa.person_id
+	WHERE 1=1
+	AND paa.business_unit_id in (:business_unit_param)
+	AND paf.person_number like (:Person_number_param) /*param*/
+),
 
 emp_profiles as (
 	select
@@ -49,11 +57,29 @@ emp_profiles as (
 		and HPB.PROFILE_ID=HPI.PROFILE_ID
 		and HPI.CONTENT_TYPE_ID=CT.CONTENT_TYPE_ID
 		and CT.language='F' /*param*/
-		and HPI.SECTION_ID='300000003197644' /*param à vérifier lors de la migration d'environnements*/
-		and paf.person_number like (:Person_number_param) /*param*/
 		and ((HPI.ATTRIBUTE_DATE2 is not null) or (HPI.ATTRIBUTE_DATE1 is not null))
 		and ((HPI.ATTRIBUTE2 is not null) or (HPI.ATTRIBUTE1 is not null))
+		and HPI.SECTION_ID='300000003197644' /*param à vérifier lors de la migration d'environnements*/
+		and paf.person_id in (select person_id from mes_critères_de_lancement)
 		) emp
+),
+
+my_element_entries as(
+			select 
+				peef.person_id
+				,peef.ASSIGNMENT_ID
+				,peevf.SCREEN_ENTRY_VALUE as Taux_cible
+				,PETF.BASE_ELEMENT_NAME as Element_name
+				--,PIV.BASE_NAME as Input_value_name
+				,peef.effective_start_date
+				,peef.effective_end_date1 as effective_end_date
+			from PAY_ELEMENT_ENTRIES_VL peef
+			inner join PER_ALL_PEOPLE_F paf on peef.person_id=paf.person_id
+			inner join PAY_ELEMENT_ENTRY_VALUES_F peevf on peef.ELEMENT_ENTRY_ID = peevf.ELEMENT_ENTRY_ID and peef.effective_start_date between peevf.effective_start_date and peevf.effective_end_date
+			inner join PAY_INPUT_VALUES_F PIV on PEEVf.INPUT_VALUE_ID = PIV.INPUT_VALUE_ID and PIV.RESERVED_INPUT_VALUE = 'RESERVED_INPUT_VALUE'
+			inner JOIN PAY_ELEMENT_TYPES_F PETF ON PETF.ELEMENT_TYPE_ID = PEEF.ELEMENT_TYPE_ID and PETF.BASE_ELEMENT_NAME in ('Taux cible RVP (%)','FRA_Bonus cible %')/*Param*/
+			where 1=1
+			and peef.effective_start_date between  peef.effective_start_date1 and peef.effective_end_date1
 ),
 
 my_assignments as (
@@ -71,7 +97,7 @@ select 				'ASSIGNMENT'
 				   ,epp.situation as C1_C2_DIR
 				   ,epp_freeze.situation as C1_C2_DIR_FREEZE
 				   ,paa.reason_code
-				   ,PEEVF.SCREEN_ENTRY_VALUE
+				   ,MEE.TAUX_CIBLE
 				   ,sal.SALARY_AMOUNT
 				   ,sal.CURRENCY_CODE as CURRENCY
 				   ,pps.actual_termination_date
@@ -90,16 +116,13 @@ select 				'ASSIGNMENT'
 		left join FUN_ALL_BUSINESS_UNITS_V fabu on paa.BUSINESS_UNIT_ID = fabu.BU_ID
 		left join PER_ASSIGN_WORK_MEASURES_F PAMMF on paa.assignment_id = PAMMF.assignment_id and PAMMF.unit = 'FTE' and paa.effective_start_date between PAMMF.effective_start_date and PAMMF.effective_end_date
 		left join HR_LOCATIONS_ALL hla on paa.location_id = hla.location_id
-		inner join PAY_ELEMENT_ENTRIES_F peef on paf.person_id = peef.person_id and sysdate between peef.effective_start_date and peef.effective_end_date
-		inner join PAY_ELEMENT_ENTRY_VALUES_F peevf on peef.ELEMENT_ENTRY_ID = peevf.ELEMENT_ENTRY_ID and paa.effective_start_date between peevf.effective_start_date and peevf.effective_end_date
-		inner JOIN PAY_INPUT_VALUES_F PIV ON PEEVf.INPUT_VALUE_ID = PIV.INPUT_VALUE_ID and PIV.BASE_NAME = 'Percentage'
-		INNER JOIN PAY_ELEMENT_TYPES_F PETF ON PETF.ELEMENT_TYPE_ID = PEEF.ELEMENT_TYPE_ID and PETF.BASE_ELEMENT_NAME in ('FRA_Bonus cible %')/*Param*/
+		left join my_element_entries MEE on paa.person_id = mee.person_id and paa.effective_start_date BETWEEN mee.effective_start_date and mee.effective_end_date
 		where 1=1 
 		and pld.freeze_date between ppn.effective_start_date and ppn.effective_end_date
 		and pld.freeze_date between pd.effective_start_date and pd.effective_end_date
 		and pld.freeze_date between paf.effective_start_date and paf.effective_end_date
 		and pld.freeze_date between pcf.effective_start_date and pcf.effective_end_date
-		and paf.person_number like (:Person_number_param) /*param*/
+		and paf.person_id in (select person_id from mes_critères_de_lancement)
 		/*and fabu.bu_name = 'CASA ES' param*/
 ),
 
@@ -121,7 +144,7 @@ my_assignments_profile as
 					   ,epp.situation as C1_C2_DIR
 					   ,epp_freeze.situation as C1_C2_DIR_FREEZE
 					   ,paa.reason_code
-					   ,PEEVF.SCREEN_ENTRY_VALUE
+					   ,MEE.TAUX_CIBLE
 					   ,sal.SALARY_AMOUNT
 					   ,sal.CURRENCY_CODE as CURRENCY
 					   ,pps.actual_termination_date
@@ -140,16 +163,13 @@ my_assignments_profile as
 			left join FUN_ALL_BUSINESS_UNITS_V fabu on paa.BUSINESS_UNIT_ID = fabu.BU_ID
 			left join PER_ASSIGN_WORK_MEASURES_F PAMMF on paa.assignment_id = PAMMF.assignment_id and PAMMF.unit = 'FTE' and paa.effective_start_date between PAMMF.effective_start_date and PAMMF.effective_end_date
 			left join HR_LOCATIONS_ALL hla on paa.location_id = hla.location_id
-			inner join PAY_ELEMENT_ENTRIES_F peef on paf.person_id = peef.person_id and sysdate between peef.effective_start_date and peef.effective_end_date
-			inner join PAY_ELEMENT_ENTRY_VALUES_F peevf on peef.ELEMENT_ENTRY_ID = peevf.ELEMENT_ENTRY_ID and epp.EMP_EFFECTIVE_START_DATE between peevf.effective_start_date and peevf.effective_end_date
-			inner JOIN PAY_INPUT_VALUES_F PIV ON PEEVf.INPUT_VALUE_ID = PIV.INPUT_VALUE_ID and PIV.BASE_NAME = 'Percentage'
-			INNER JOIN PAY_ELEMENT_TYPES_F PETF ON PETF.ELEMENT_TYPE_ID = PEEF.ELEMENT_TYPE_ID and PETF.BASE_ELEMENT_NAME in ('FRA_Bonus cible %')/*Param*/
+			left join my_element_entries MEE on paa.person_id = mee.person_id and epp.EMP_EFFECTIVE_START_DATE BETWEEN mee.effective_start_date and mee.effective_end_date
 			where 1=1 
 			and pld.freeze_date between ppn.effective_start_date and ppn.effective_end_date
 			and pld.freeze_date between pd.effective_start_date and pd.effective_end_date
 			and pld.freeze_date between paf.effective_start_date and paf.effective_end_date
 					and pld.freeze_date between pcf.effective_start_date and pcf.effective_end_date
-			and paf.person_number like (:Person_number_param) /*param*/
+			and paf.person_id in (select person_id from mes_critères_de_lancement)
 			/*and fabu.bu_name = 'CASA ES' param*/
 ),
 
@@ -170,7 +190,7 @@ my_assignments_salary as
 					   ,epp.situation as C1_C2_DIR
 					   ,epp_freeze.situation as C1_C2_DIR_FREEZE
 					   ,sal.SALARY_REASON_CODE
-					   ,PEEVF.SCREEN_ENTRY_VALUE
+					   ,MEE.TAUX_CIBLE
 					   ,sal.SALARY_AMOUNT
 					   ,sal.CURRENCY_CODE as CURRENCY
 					   ,pps.actual_termination_date
@@ -190,16 +210,13 @@ my_assignments_salary as
 			left join FUN_ALL_BUSINESS_UNITS_V fabu on paa.BUSINESS_UNIT_ID = fabu.BU_ID
 			left join PER_ASSIGN_WORK_MEASURES_F PAMMF on paa.assignment_id = PAMMF.assignment_id and PAMMF.unit = 'FTE' and paa.effective_start_date between PAMMF.effective_start_date and PAMMF.effective_end_date
 			left join HR_LOCATIONS_ALL hla on paa.location_id = hla.location_id
-			inner join PAY_ELEMENT_ENTRIES_F peef on paf.person_id = peef.person_id and sysdate between peef.effective_start_date and peef.effective_end_date
-			inner join PAY_ELEMENT_ENTRY_VALUES_F peevf on peef.ELEMENT_ENTRY_ID = peevf.ELEMENT_ENTRY_ID and sal.date_from between peevf.effective_start_date and peevf.effective_end_date
-			inner JOIN PAY_INPUT_VALUES_F PIV ON PEEVf.INPUT_VALUE_ID = PIV.INPUT_VALUE_ID and PIV.BASE_NAME = 'Percentage'
-			INNER JOIN PAY_ELEMENT_TYPES_F PETF ON PETF.ELEMENT_TYPE_ID = PEEF.ELEMENT_TYPE_ID and PETF.BASE_ELEMENT_NAME in ('FRA_Bonus cible %')/*Param*/
+			left join my_element_entries MEE on paa.person_id = mee.person_id and sal.date_from BETWEEN mee.effective_start_date and mee.effective_end_date
 			where 1=1 
 			and pld.freeze_date between ppn.effective_start_date and ppn.effective_end_date
 			and pld.freeze_date between pd.effective_start_date and pd.effective_end_date
 			and pld.freeze_date between paf.effective_start_date and paf.effective_end_date
 					and pld.freeze_date between pcf.effective_start_date and pcf.effective_end_date
-			and paf.person_number like (:Person_number_param) /*param*/
+			and paf.person_id in (select person_id from mes_critères_de_lancement)
 			/*and fabu.bu_name = 'CASA ES' param*/
 ),
 
@@ -210,8 +227,8 @@ my_assignments_elements as
 		   ,paf.person_id
 		   ,ppn.last_name
 		   ,ppn.first_name
-		   ,peevf.effective_start_date as effective_start_date
-		   ,peevf.effective_end_date as effective_end_date
+		   ,MEE.effective_start_date as effective_start_date
+		   ,MEE.effective_end_date as effective_end_date
 		   ,fabu.bu_name
 		   ,PAMMF.Value	"FTE"
 		   ,pd.name as department_name
@@ -219,37 +236,34 @@ my_assignments_elements as
 		   ,epp.situation as C1_C2_DIR
 		   ,epp_freeze.situation as C1_C2_DIR_FREEZE
 		   ,'ELEMENT_REASON' as ELEMENT_REASON
-		   ,PEEVf.SCREEN_ENTRY_VALUE
+		   ,MEE.TAUX_CIBLE
 		   ,sal.SALARY_AMOUNT
 		   ,sal.CURRENCY_CODE as CURRENCY
 		   ,pps.actual_termination_date
 		-- ,'ELEMENT' as ASS_TYPE
 			from PER_ALL_PEOPLE_F paf
+			inner join my_element_entries MEE on paf.person_id = mee.person_id
 			inner join PER_ALL_ASSIGNMENTS_F paa on paa.person_id = paf.person_id and paa.assignment_type='E'  
-			inner join PAY_ELEMENT_ENTRIES_F peef on paf.person_id = peef.person_id and sysdate between peef.effective_start_date and peef.effective_end_date
-			inner join PAY_ELEMENT_ENTRY_VALUES_F peevf on peef.ELEMENT_ENTRY_ID = peevf.ELEMENT_ENTRY_ID
-			inner JOIN PAY_INPUT_VALUES_F PIV ON PEEVf.INPUT_VALUE_ID = PIV.INPUT_VALUE_ID and PIV.BASE_NAME = 'Percentage'
-			INNER JOIN PAY_ELEMENT_TYPES_F PETF ON PETF.ELEMENT_TYPE_ID = PEEF.ELEMENT_TYPE_ID and PETF.BASE_ELEMENT_NAME in ('FRA_Bonus cible %')/*Param*/
 			left join my_plan_date pld on 1=1
 			inner join PER_PERSON_NAMES_F PPN on paf.person_id = ppn.person_id and ppn.name_type='GLOBAL'
 			left join PER_CONTRACTS_F pcf on pcf.person_id=paa.person_id and pcf.contract_id=paa.contract_id
 				left join FND_LOOKUP_VALUES_TL lookup_contract on pcf.type = lookup_contract.lookup_code and lookup_contract.lookup_type = 'CONTRACT_TYPE' and lookup_contract.language = 'F' /*Param*/
 			inner join per_periods_of_service pps on paa.person_id = pps.person_id and paa.period_of_service_id = pps.period_of_service_id
-			left join emp_profiles epp on epp.person_id =paf.person_id and EMP_EFFECTIVE_START_DATE<=peevf.effective_start_date
+			left join emp_profiles epp on epp.person_id =paf.person_id and EMP_EFFECTIVE_START_DATE<=MEE.effective_start_date
 			left join emp_profiles epp_freeze on epp_freeze.person_id =paf.person_id and epp_freeze.EMP_EFFECTIVE_START_DATE<= pld.freeze_date and epp_freeze.last_situation='Y'
 			left join PER_ALL_ASSIGNMENTS_F paa2 on paa2.person_id = paf.person_id and paa2.assignment_type='E'  and epp.EMP_EFFECTIVE_START_DATE between paa2.effective_start_date and paa2.effective_end_date --and ASSIGNMENT_STATUS_TYPE = 'ACTIVE'
 			left join per_departments pd on paa.organization_id = pd.organization_id
 			left join FUN_ALL_BUSINESS_UNITS_V fabu on paa.BUSINESS_UNIT_ID = fabu.BU_ID
 			left join PER_ASSIGN_WORK_MEASURES_F PAMMF on paa.assignment_id = PAMMF.assignment_id and PAMMF.unit = 'FTE' and paa.effective_start_date between PAMMF.effective_start_date and PAMMF.effective_end_date
 			left join HR_LOCATIONS_ALL hla on paa.location_id = hla.location_id
-			left join CMP_SALARY sal on sal.person_id = paa.person_id and sal.assignment_id=paa.assignment_id and peevf.effective_start_date between sal.date_from and sal.date_to
+			left join CMP_SALARY sal on sal.person_id = paa.person_id and sal.assignment_id=paa.assignment_id and MEE.effective_start_date between sal.date_from and sal.date_to
 			where 1=1 
-			and peevf.effective_start_date between paa.effective_start_date and paa.effective_end_date
+			and mee.effective_start_date between paa.effective_start_date and paa.effective_end_date
 			and pld.freeze_date between ppn.effective_start_date and ppn.effective_end_date
 			and pld.freeze_date between pd.effective_start_date and pd.effective_end_date
 			and pld.freeze_date between paf.effective_start_date and paf.effective_end_date
 					and pld.freeze_date between pcf.effective_start_date and pcf.effective_end_date
-			and paf.person_number like (:Person_number_param) /*param*/
+			and paf.person_id in (select person_id from mes_critères_de_lancement)
 			/*and fabu.bu_name = 'CASA ES' param*/
 ),
 
@@ -287,6 +301,7 @@ select 			    mtaw.person_number
 					,mtaw.reason_code
 					,mtaw.SALARY_AMOUNT
 					,mtaw.CURRENCY
+					,mtaw.TAUX_CIBLE
 					,mtaw.actual_termination_date
 					,pld.start_date
 					,LAG(effective_start_date) OVER (PARTITION BY person_id ORDER BY effective_start_date, effective_end_date) AS prev_eff_start_date
@@ -308,8 +323,6 @@ and not (
 and  mtaw.effective_end_date >= pld.start_date
 order by mtaw.effective_start_date, mtaw.effective_end_date),
 
-
-
 effective_date_corrected as(
 select 
 	 person_number
@@ -324,6 +337,7 @@ select
 	,reason_code
 	,SALARY_AMOUNT
 	,CURRENCY
+	,TAUX_CIBLE
 	,CASE 
 		WHEN actual_termination_date is null THEN to_date(to_char('31/12/4712'),'dd/mm/yyyy')
 		ELSE actual_termination_date
@@ -339,6 +353,7 @@ select
 		ELSE effective_start_date
 	END as effective_start_date_corrected
 	,CASE
+		WHEN EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') and NEXT_EFF_START_DATE is not null and C1_C2_DIR_FREEZE is not null then add_months(trunc(pld.start_date,'Q')-1,12) /*end_of_year*/
 		WHEN EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') and NEXT_EFF_START_DATE is not null then NEXT_EFF_START_DATE-1
 		WHEN effective_end_date > pld.end_date and EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') THEN add_months(trunc(pld.start_date,'Q')-1,12) /*end_of_year*/
 		WHEN effective_end_date > pld.end_date THEN pld.start_date
@@ -358,7 +373,9 @@ my_real_phase as (
 select * from effective_date_corrected
 left join my_plan_date pld on 1=1
 where EFFECTIVE_START_DATE_CORRECTED<actual_termination_date
-and EFFECTIVE_END_DATE_CORRECTED >= pld.start_date),
+and EFFECTIVE_END_DATE_CORRECTED >= pld.start_date
+--and EFFECTIVE_START_DATE_CORRECTED<=EFFECTIVE_END_DATE_CORRECTED
+),
 
 my_real_phase_adjusted as (
 select 	a.*
@@ -366,13 +383,14 @@ select 	a.*
 			WHEN EFFECTIVE_END_DATE_CORRECTED= add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/ THEN add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/
 			WHEN EFFECTIVE_END_DATE_CORRECTED= ADD_MONTHS(TRUNC(start_date, 'YEAR'), 12)-1/24/60/60 /*end_of_year*/ THEN add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/
 			WHEN EFFECTIVE_END_DATE_CORRECTED = ACTUAL_TERMINATION_DATE AND C1_C2_DIR is not null THEN EFFECTIVE_END_DATE_CORRECTED
+			WHEN EFFECTIVE_END_DATE_CORRECTED = ACTUAL_TERMINATION_DATE AND C1_C2_DIR is null and NEXT_EFF_START_DATE is not null THEN EFFECTIVE_END_DATE_CORRECTED /*end_of_year*/
 			WHEN EFFECTIVE_END_DATE_CORRECTED = ACTUAL_TERMINATION_DATE AND C1_C2_DIR is null THEN add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/
 			ELSE LEAD(EFFECTIVE_START_DATE_CORRECTED-1) OVER (ORDER BY EFFECTIVE_START_DATE_CORRECTED)
 		END As EFFECTIVE_END_DATE_ADJUSTED
 from (
 	select 	mrp.* 
-			,person_id||bu_name||FTE||CONTRACT||department_name|| SALARY_AMOUNT as KEY
-			,LAG(person_id||bu_name||FTE||CONTRACT||department_name|| SALARY_AMOUNT || C1_C2_DIR ) OVER (PARTITION BY person_id,bu_name,FTE,CONTRACT,department_name, SALARY_AMOUNT, C1_C2_DIR ORDER BY EFFECTIVE_START_DATE_CORRECTED) As PREV_KEY
+			,person_id||bu_name||FTE||CONTRACT||department_name|| SALARY_AMOUNT || C1_C2_DIR || TAUX_CIBLE as KEY
+			,LAG(person_id||bu_name||FTE||CONTRACT||department_name|| SALARY_AMOUNT || C1_C2_DIR || TAUX_CIBLE ) OVER (PARTITION BY person_id,bu_name,FTE,CONTRACT,department_name, SALARY_AMOUNT, C1_C2_DIR, TAUX_CIBLE ORDER BY EFFECTIVE_START_DATE_CORRECTED) As PREV_KEY
 	from my_real_phase mrp) a
 where PREV_KEY is null
 order by EFFECTIVE_START_DATE_CORRECTED, EFFECTIVE_END_DATE_CORRECTED),
@@ -381,6 +399,8 @@ last_salary_for_assignment as (
 select person_id, assignment_id, CURRENCY_CODE from CMP_SALARY sal2
 where sal2.date_from = (select max(sal3.date_from) from CMP_SALARY sal3 where sal2.person_id=sal3.person_id and sal2.assignment_id=sal3.assignment_id)
 ),
+
+
 
 my_real_phase_adjusted_and_last_assignment as (
 select 	mrpa.person_number
@@ -397,6 +417,7 @@ select 	mrpa.person_number
 		,mrpa.SALARY_AMOUNT
 		,mrpa.CURRENCY
 		,lsfa.CURRENCY_CODE as LAST_CURRENCY_FOR_ASSIGNMENT
+		,mrpa.TAUX_CIBLE
 		,CASE 
 			WHEN mrpa.CURRENCY=lsfa.CURRENCY_CODE THEN 1
 			WHEN DR1.CONVERSION_RATE = 0 THEN 1
@@ -407,7 +428,18 @@ select 	mrpa.person_number
 		,mrpa.EFFECTIVE_END_DATE_ADJUSTED-mrpa.EFFECTIVE_START_DATE_CORRECTED +1 as PRESENCE_CALENDAIRE_AJUSTEE
 		,freeze_date
 from my_real_phase_adjusted mrpa 
-inner join PER_ALL_ASSIGNMENTS_F paa on paa.person_id=mrpa.person_id and paa.ASSIGNMENT_STATUS_TYPE='ACTIVE' and paa.assignment_type='E' and paa.effective_start_date = (select max(paa2.effective_start_date) from PER_ALL_ASSIGNMENTS_F paa2 where  paa.person_id=paa2.person_id and paa2.assignment_type='E' and paa2.ASSIGNMENT_STATUS_TYPE='ACTIVE' and paa2.effective_start_date<=freeze_date and paa2.business_unit_id = '300000001935917' /*Param critère de lancement*/)
+inner join PER_ALL_ASSIGNMENTS_F paa 	on paa.person_id=mrpa.person_id 
+										and paa.ASSIGNMENT_STATUS_TYPE='ACTIVE' 
+										and paa.assignment_type='E' 
+										and paa.effective_start_date = (select max(paa2.effective_start_date) 	from 
+																												PER_ALL_ASSIGNMENTS_F paa2 
+																												where  paa.person_id=paa2.person_id 
+																												and paa2.assignment_type='E' 
+																												and paa2.ASSIGNMENT_STATUS_TYPE='ACTIVE' 
+																												and paa2.effective_start_date<=freeze_date 
+																												--and paa2.business_unit_id = '300000001935917' /*Param critère de lancement*/
+																												and (paa2.person_id, paa2.assignment_id) in (select cr.person_id, cr.assignment_id from mes_critères_de_lancement cr)
+																		)
 left join last_salary_for_assignment lsfa on paa.person_id=lsfa.person_id and paa.assignment_id=lsfa.assignment_id
 left join GL_DAILY_RATES DR1 ON DR1.FROM_CURRENCY=mrpa.CURRENCY and DR1.TO_CURRENCY=lsfa.CURRENCY_CODE and CONVERSION_TYPE='Corporate' and DR1.CONVERSION_DATE = paa.effective_start_date
 )
@@ -425,7 +457,9 @@ select
 		,mrpala.C1_C2_DIR
 		,mrpala.reason_code
 		,mrpala.SALARY_AMOUNT*mrpala.CONVERSION_RATE as SALARY_AMOUNT_CONVERTED
+		,mrpala.CURRENCY
 		,mrpala.LAST_CURRENCY_FOR_ASSIGNMENT
+		,mrpala.TAUX_CIBLE
 		,mrpala.EFFECTIVE_START_DATE_CORRECTED
 		,mrpala.EFFECTIVE_END_DATE_ADJUSTED
 		,mrpala.EFFECTIVE_END_DATE_ADJUSTED-mrpala.EFFECTIVE_START_DATE_CORRECTED +1 as PRESENCE_CALENDAIRE_AJUSTEE

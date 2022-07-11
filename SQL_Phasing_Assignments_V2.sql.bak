@@ -375,6 +375,7 @@ FROM my_real_phase_adjusted_and_last_assignment mrpala
 - Ajouter le cas du C2 qui passe C1 KL100011573_P0 --> DONE
 - Ajouter le cas du Tout Collab à C2  KL100011585_P0 --> DONE
 - Cas d'un collab sans phase > pas de ligne apparente dans la query KL100011584_P0 --> DONE
+- cas du changement de FTE existe mb433443434P1? 
 
 
 Verif
