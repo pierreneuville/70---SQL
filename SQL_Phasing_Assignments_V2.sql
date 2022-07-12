@@ -13,15 +13,6 @@ and plan_name =NVL(:plan_name_param, 'CASA - Campagne Salariale (PNE)') /*param*
 and period_name=NVL(:plan_cycle_param, 'CASAES - 2022') /*param*/
 order by 1),
 
-mes_critères_de_lancement AS (
-select distinct paf.person_id, paa.assignment_id
-	from per_all_people_f paf
-	inner join PER_ALL_ASSIGNMENTS_F paa on paf.person_id=paa.person_id
-	WHERE 1=1
-	AND paa.business_unit_id in (:business_unit_param)
-	AND paf.person_number like (:Person_number_param) /*param*/
-),
-
 emp_profiles as (
 	select
 		person_id
@@ -60,8 +51,20 @@ emp_profiles as (
 		and ((HPI.ATTRIBUTE_DATE2 is not null) or (HPI.ATTRIBUTE_DATE1 is not null))
 		and ((HPI.ATTRIBUTE2 is not null) or (HPI.ATTRIBUTE1 is not null))
 		and HPI.SECTION_ID='300000003197644' /*param à vérifier lors de la migration d'environnements*/
-		and paf.person_id in (select person_id from mes_critères_de_lancement)
+		--and paf.person_id in (select person_id from mes_critères_de_lancement)
 		) emp
+),
+
+mes_critères_de_lancement AS (
+select distinct paf.person_id, paa.assignment_id
+	from per_all_people_f paf
+	inner join PER_ALL_ASSIGNMENTS_F paa on paf.person_id=paa.person_id
+	left join my_plan_date pld on 1=1
+	left join emp_profiles epp_freeze on epp_freeze.person_id =paf.person_id and epp_freeze.EMP_EFFECTIVE_START_DATE<= pld.freeze_date and epp_freeze.last_situation='Y'
+	WHERE 1=1
+	AND (paa.business_unit_id IN (:business_unit_param) OR COALESCE(:business_unit_param, NULL) IS NULL)
+	AND (epp_freeze.situation IN (:situation_param) OR COALESCE(:situation_param, NULL) IS NULL)
+	AND paf.person_number like (:Person_number_param) /*param*/
 ),
 
 my_element_entries as(
@@ -91,6 +94,7 @@ select 				'ASSIGNMENT'
 				   ,paa.effective_start_date
 				   ,paa.effective_end_date
 				   ,fabu.bu_name
+				   ,fabu.bu_id
 				   ,PAMMF.Value	"FTE"
 				   ,pd.name as department_name
 				   ,lookup_contract.meaning "CONTRACT"
@@ -138,6 +142,7 @@ my_assignments_profile as
 					   ,to_date(to_char('31/12/4712'),'dd/mm/yyyy') as effective_end_date
 					  -- ,paa.effective_end_date as effective_end_date
 					   ,fabu.bu_name
+					   ,fabu.bu_id
 					   ,PAMMF.Value	"FTE"
 					   ,pd.name as department_name
 					   ,lookup_contract.meaning "CONTRACT"
@@ -184,6 +189,7 @@ my_assignments_salary as
 					   --,sal.DATE_FROM AS first_eff_date
 					   ,sal.DATE_TO as effective_end_date
 					   ,fabu.bu_name
+					   ,fabu.bu_id
 					   ,PAMMF.Value	"FTE"
 					   ,pd.name as department_name
 					   ,lookup_contract.meaning "CONTRACT"
@@ -230,6 +236,7 @@ my_assignments_elements as
 		   ,MEE.effective_start_date as effective_start_date
 		   ,MEE.effective_end_date as effective_end_date
 		   ,fabu.bu_name
+		   ,fabu.bu_id
 		   ,PAMMF.Value	"FTE"
 		   ,pd.name as department_name
 		   ,lookup_contract.meaning "CONTRACT"
@@ -293,6 +300,7 @@ select 			    mtaw.person_number
 					,mtaw.effective_start_date
 					,mtaw.effective_end_date
 					,mtaw.bu_name
+					,mtaw.bu_id
 					,mtaw.FTE
 					,mtaw.CONTRACT
 					,mtaw.department_name
@@ -327,10 +335,12 @@ select
 	,last_name
 	,first_name
 	,bu_name
+	,bu_id
 	,FTE
 	,CONTRACT
 	,department_name
 	,C1_C2_DIR
+	,C1_C2_DIR_FREEZE
 	,reason_code
 	,SALARY_AMOUNT
 	,CURRENCY
@@ -350,7 +360,7 @@ select
 		ELSE effective_start_date
 	END as effective_start_date_corrected
 	,CASE
-		WHEN EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') and NEXT_EFF_START_DATE is not null and C1_C2_DIR_FREEZE is not null then add_months(trunc(pld.start_date,'Q')-1,12) /*end_of_year*/
+		WHEN EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') and NEXT_EFF_START_DATE is not null and C1_C2_DIR_FREEZE is not null and C1_C2_DIR is not null then add_months(trunc(pld.start_date,'Q')-1,12) /*end_of_year*/
 		WHEN EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') and NEXT_EFF_START_DATE is not null then NEXT_EFF_START_DATE-1
 		WHEN effective_end_date > pld.end_date and EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') THEN add_months(trunc(pld.start_date,'Q')-1,12) /*end_of_year*/
 		WHEN effective_end_date > pld.end_date THEN pld.start_date
@@ -403,13 +413,16 @@ my_real_phase_adjusted_and_last_assignment as (
 select 	mrpa.person_number
 		,mrpa.person_id
 		,paa.assignment_id
+		,paa.ASSIGNMENT_NUMBER
 		,mrpa.last_name
 		,mrpa.first_name
 		,mrpa.bu_name
+		,mrpa.bu_id
 		,mrpa.FTE
 		,mrpa.CONTRACT
 		,mrpa.department_name
 		,mrpa.C1_C2_DIR
+		,mrpa.C1_C2_DIR_FREEZE
 		,mrpa.reason_code
 		,mrpa.SALARY_AMOUNT
 		,mrpa.CURRENCY
@@ -428,13 +441,15 @@ from my_real_phase_adjusted mrpa
 inner join PER_ALL_ASSIGNMENTS_F paa 	on paa.person_id=mrpa.person_id 
 										and paa.ASSIGNMENT_STATUS_TYPE='ACTIVE' 
 										and paa.assignment_type='E' 
+										and paa.business_unit_id = mrpa.bu_id /*Param critère de lancement*/
 										and paa.effective_start_date = (select max(paa2.effective_start_date) 	from 
 																												PER_ALL_ASSIGNMENTS_F paa2 
 																												where  paa.person_id=paa2.person_id 
 																												and paa2.assignment_type='E' 
 																												and paa2.ASSIGNMENT_STATUS_TYPE='ACTIVE' 
-																												and paa2.effective_start_date<=freeze_date 
-																												--and paa2.business_unit_id = '300000001935917' /*Param critère de lancement*/
+																												and paa2.effective_start_date<=freeze_date
+																												and paa.business_unit_id = paa2.business_unit_id																												
+																												and paa2.assignment_id=paa.assignment_id
 																												and (paa2.person_id, paa2.assignment_id) in (select cr.person_id, cr.assignment_id from mes_critères_de_lancement cr)
 																		)
 left join last_salary_for_assignment lsfa on paa.person_id=lsfa.person_id and paa.assignment_id=lsfa.assignment_id
@@ -445,13 +460,16 @@ select
 		mrpala.person_number
 		,mrpala.person_id
 		,mrpala.assignment_id
+		,mrpala.ASSIGNMENT_NUMBER
 		,mrpala.last_name
 		,mrpala.first_name
 		,mrpala.bu_name
+		,mrpala.bu_id
 		,mrpala.FTE
 		,mrpala.CONTRACT
 		,mrpala.department_name
 		,mrpala.C1_C2_DIR
+		,mrpala.C1_C2_DIR_FREEZE
 		,mrpala.reason_code
 		,mrpala.SALARY_AMOUNT*mrpala.CONVERSION_RATE as SALARY_AMOUNT_CONVERTED
 		,mrpala.CURRENCY
@@ -462,6 +480,7 @@ select
 		,mrpala.EFFECTIVE_END_DATE_ADJUSTED-mrpala.EFFECTIVE_START_DATE_CORRECTED +1 as PRESENCE_CALENDAIRE_AJUSTEE
 		,mrpala.freeze_date
 FROM my_real_phase_adjusted_and_last_assignment mrpala
+order by PERSON_NUMBER, EFFECTIVE_START_DATE_CORRECTED, EFFECTIVE_END_DATE_ADJUSTED
 
 /*
 - Suppression de la phase en cours car au niveau du plan / A FAIRE EN DERNIER
@@ -472,7 +491,9 @@ FROM my_real_phase_adjusted_and_last_assignment mrpala
 - Ajout du taux cible --> DONE
 - Ajouter le cas du C2 qui passe C1 KL100011573_P0 --> DONE
 - Ajouter le cas du Tout Collab à C2  KL100011585_P0 --> DONE
-- Cas d'un collab sans phase > pas de ligne apparente dans la query KL100011584_P0 --> DONE
+- Cas de Tout Collab qui passe C2 KL100011585_P0
+- Cas d'un collab sans phase > pas de ligne apparente dans la query KL100011584_P0 --> DONE*
+- Récupération de l'assignment id inactif dans le cas d'un move C1 de CASA ES à CACIB pour avoir que les phases sur CASA ES
 
 
 
