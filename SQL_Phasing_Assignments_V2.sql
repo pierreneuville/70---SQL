@@ -14,44 +14,51 @@ and period_name=NVL(:plan_cycle_param, 'CASAES - 2022') /*param*/
 order by 1),
 
 emp_profiles as (
-	select
+select
 		person_id
 		,SITUATION
 		,EMP_EFFECTIVE_START_DATE
 		,CASE 
-			WHEN LAST_VALUE(EMP_EFFECTIVE_START_DATE) OVER (PARTITION BY person_id ORDER BY EMP_EFFECTIVE_START_DATE ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) = EMP_EFFECTIVE_START_DATE THEN 'Y' 
+			--WHEN SITUATION='C1' THEN 'Y'
+			WHEN 	--SITUATION<>'C1' AND
+					LAST_VALUE(EMP_EFFECTIVE_START_DATE) OVER (PARTITION BY person_id ORDER BY EMP_EFFECTIVE_START_DATE ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) = EMP_EFFECTIVE_START_DATE THEN 'Y' 
 			ELSE 'N'
 		END AS last_situation
-	from(
-		select 
-			paf.person_id
-			,CASE
-				WHEN HPI.ATTRIBUTE_DATE2>=HPI.ATTRIBUTE_DATE1 AND HPI.ATTRIBUTE_DATE2<=freeze_date THEN HPI.ATTRIBUTE2
-				WHEN HPI.ATTRIBUTE_DATE1>HPI.ATTRIBUTE_DATE2 AND HPI.ATTRIBUTE_DATE2<=freeze_date THEN HPI.ATTRIBUTE2
-				WHEN HPI.ATTRIBUTE_DATE1 is null and HPI.ATTRIBUTE_DATE2<=freeze_date THEN HPI.ATTRIBUTE2
-				WHEN HPI.ATTRIBUTE_DATE2 is null and HPI.ATTRIBUTE_DATE1<=freeze_date THEN HPI.ATTRIBUTE1 
-			END "SITUATION"
-			,CASE
-				WHEN HPI.ATTRIBUTE_DATE2>=HPI.ATTRIBUTE_DATE1 AND HPI.ATTRIBUTE_DATE2<=freeze_date THEN HPI.ATTRIBUTE_DATE2
-				WHEN HPI.ATTRIBUTE_DATE1>HPI.ATTRIBUTE_DATE2 AND HPI.ATTRIBUTE_DATE2<=freeze_date THEN HPI.ATTRIBUTE_DATE2
-				WHEN HPI.ATTRIBUTE_DATE1 is null and HPI.ATTRIBUTE_DATE2<=freeze_date THEN HPI.ATTRIBUTE_DATE2
-				WHEN HPI.ATTRIBUTE_DATE2 is null and HPI.ATTRIBUTE_DATE1<=freeze_date THEN HPI.ATTRIBUTE_DATE1 
-			END "EMP_EFFECTIVE_START_DATE"
-		FROM
-		HRT_PROFILES_B HPB,
-		HRT_PROFILE_ITEMS HPI,
-		HRT_CONTENT_TYPES_TL CT,
-		per_all_people_f paf,
-		my_plan_date pld
+	from(select hpb.person_id
+				,HPI.ATTRIBUTE1 as SITUATION
+				,HPI.ATTRIBUTE_DATE1 as EMP_EFFECTIVE_START_DATE
+		from 		
+			HRT_PROFILES_B HPB
+			,HRT_PROFILE_ITEMS HPI
+			,HRT_CONTENT_TYPES_TL CT
+			,my_plan_date pld
 		WHERE 1=1
-		and paf.person_id= HPB.person_id
-		and HPB.PROFILE_ID=HPI.PROFILE_ID
-		and HPI.CONTENT_TYPE_ID=CT.CONTENT_TYPE_ID
-		and CT.language='F' /*param*/
-		and ((HPI.ATTRIBUTE_DATE2 is not null) or (HPI.ATTRIBUTE_DATE1 is not null))
-		and ((HPI.ATTRIBUTE2 is not null) or (HPI.ATTRIBUTE1 is not null))
-		and HPI.SECTION_ID='300000003197644' /*param à vérifier lors de la migration d'environnements*/
-		--and paf.person_id in (select person_id from mes_critères_de_lancement)
+			and HPB.PROFILE_ID=HPI.PROFILE_ID
+			and HPI.CONTENT_TYPE_ID=CT.CONTENT_TYPE_ID
+			and CT.language='F' /*param*/
+			and HPI.ATTRIBUTE_DATE1 is not null
+			and HPI.ATTRIBUTE_DATE1<=pld.freeze_date
+			and HPI.ATTRIBUTE1 is not null
+			and HPI.SECTION_ID in ('300000003197644' /*Dir Groupe*/, '300000020691903' /*Personnel identifié*/) /*param à vérifier lors de la migration d'environnements*/
+			--and HPB.person_id='300000045040963'
+		union
+		select hpb.person_id
+				,HPI.ATTRIBUTE2 as SITUATION
+				,HPI.ATTRIBUTE_DATE2 as EMP_EFFECTIVE_START_DATE 
+			from 		
+				HRT_PROFILES_B HPB
+				,HRT_PROFILE_ITEMS HPI
+				,HRT_CONTENT_TYPES_TL CT
+				,my_plan_date pld
+			WHERE 1=1
+				and HPB.PROFILE_ID=HPI.PROFILE_ID
+				and HPI.CONTENT_TYPE_ID=CT.CONTENT_TYPE_ID
+				and CT.language='F' /*param*/
+				and HPI.ATTRIBUTE_DATE2 is not null
+				and HPI.ATTRIBUTE_DATE2<=pld.freeze_date
+				and HPI.ATTRIBUTE2 is not null
+				and HPI.SECTION_ID in ('300000003197644' /*Dir Groupe*/, '300000020691903' /*Personnel identifié*/) /*param à vérifier lors de la migration d'environnements*/
+				--and HPB.person_id='300000045040963' 
 		) emp
 ),
 
@@ -63,7 +70,18 @@ select distinct paf.person_id, paa.assignment_id
 	left join emp_profiles epp_freeze on epp_freeze.person_id =paf.person_id and epp_freeze.EMP_EFFECTIVE_START_DATE<= pld.freeze_date and epp_freeze.last_situation='Y'
 	WHERE 1=1
 	AND (paa.business_unit_id IN (:business_unit_param) OR COALESCE(:business_unit_param, NULL) IS NULL)
-	AND (epp_freeze.situation IN (:situation_param) OR COALESCE(:situation_param, NULL) IS NULL)
+	--AND (epp_freeze.situation IN (replace(:situation_param,'PI',q'['C1','C10','C11','C12','C13','C14','C15','C2','C3a','C3b','C3c','C3d','C4','C5','C6','C7','C8','C9']')) OR COALESCE(:situation_param, NULL) IS NULL)
+	AND
+	(
+		(
+			(:situation_param = 'PI' and epp_freeze.situation in ('C1','C10','C11','C12','C13','C14','C15','C2','C3a','C3b','C3c','C3d','C4','C5','C6','C7','C8','C9'))
+			or
+			(:situation_param = 'DIR' and epp_freeze.situation in ('DG','DGA','DR'))
+			or
+			(:situation_param <> 'PI' and epp_freeze.situation in (:situation_param))
+		)
+		OR COALESCE(:situation_param, NULL) IS NULL
+	)
 	AND paf.person_number like (:Person_number_param) /*param*/
 ),
 
@@ -360,7 +378,7 @@ select
 		ELSE effective_start_date
 	END as effective_start_date_corrected
 	,CASE
-		WHEN EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') and NEXT_EFF_START_DATE is not null and C1_C2_DIR_FREEZE is not null and C1_C2_DIR is not null then add_months(trunc(pld.start_date,'Q')-1,12) /*end_of_year*/
+		WHEN EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') and NEXT_EFF_START_DATE is not null and C1_C2_DIR_FREEZE is not null and C1_C2_DIR is not null and C1_C2_DIR_FREEZE=C1_C2_DIR then add_months(trunc(pld.start_date,'Q')-1,12) /*end_of_year*/
 		WHEN EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') and NEXT_EFF_START_DATE is not null then NEXT_EFF_START_DATE-1
 		WHEN effective_end_date > pld.end_date and EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') THEN add_months(trunc(pld.start_date,'Q')-1,12) /*end_of_year*/
 		WHEN effective_end_date > pld.end_date THEN pld.start_date
@@ -501,4 +519,3 @@ Verif
 - Ajout des phases en cas de changements de contrats --> Vérifier les règles en vigueur
 - Retirer de la requête les C1 ayant effectué une Mobilité Intra-Groupe (car cela sera géré au niveau de la double ligne de la feuille de travail)
 */
-

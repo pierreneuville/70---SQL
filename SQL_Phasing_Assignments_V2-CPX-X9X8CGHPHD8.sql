@@ -19,7 +19,9 @@ emp_profiles as (
 		,SITUATION
 		,EMP_EFFECTIVE_START_DATE
 		,CASE 
-			WHEN LAST_VALUE(EMP_EFFECTIVE_START_DATE) OVER (PARTITION BY person_id ORDER BY EMP_EFFECTIVE_START_DATE ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) = EMP_EFFECTIVE_START_DATE THEN 'Y' 
+			--WHEN SITUATION='C1' THEN 'Y'
+			WHEN 	--SITUATION<>'C1' AND
+					LAST_VALUE(EMP_EFFECTIVE_START_DATE) OVER (PARTITION BY person_id ORDER BY EMP_EFFECTIVE_START_DATE ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) = EMP_EFFECTIVE_START_DATE THEN 'Y' 
 			ELSE 'N'
 		END AS last_situation
 	from(
@@ -50,7 +52,7 @@ emp_profiles as (
 		and CT.language='F' /*param*/
 		and ((HPI.ATTRIBUTE_DATE2 is not null) or (HPI.ATTRIBUTE_DATE1 is not null))
 		and ((HPI.ATTRIBUTE2 is not null) or (HPI.ATTRIBUTE1 is not null))
-		and HPI.SECTION_ID='300000003197644' /*param à vérifier lors de la migration d'environnements*/
+		and HPI.SECTION_ID in ('300000003197644' /*Dir Groupe*/, '300000020691903' /*Personnel identifié*/) /*param à vérifier lors de la migration d'environnements*/
 		--and paf.person_id in (select person_id from mes_critères_de_lancement)
 		) emp
 ),
@@ -360,7 +362,7 @@ select
 		ELSE effective_start_date
 	END as effective_start_date_corrected
 	,CASE
-		WHEN EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') and NEXT_EFF_START_DATE is not null and C1_C2_DIR_FREEZE is not null and C1_C2_DIR is not null then add_months(trunc(pld.start_date,'Q')-1,12) /*end_of_year*/
+		WHEN EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') and NEXT_EFF_START_DATE is not null and C1_C2_DIR_FREEZE is not null and C1_C2_DIR is not null and C1_C2_DIR_FREEZE=C1_C2_DIR then add_months(trunc(pld.start_date,'Q')-1,12) /*end_of_year*/
 		WHEN EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') and NEXT_EFF_START_DATE is not null then NEXT_EFF_START_DATE-1
 		WHEN effective_end_date > pld.end_date and EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') THEN add_months(trunc(pld.start_date,'Q')-1,12) /*end_of_year*/
 		WHEN effective_end_date > pld.end_date THEN pld.start_date
