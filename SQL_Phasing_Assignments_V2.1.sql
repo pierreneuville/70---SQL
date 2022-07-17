@@ -80,6 +80,8 @@ select distinct paf.person_id, paa.assignment_id
 			('C1' in (:situation_param) and  epp_freeze.situation in ('C1'))
 			or
 			('C2' in (:situation_param) and  epp_freeze.situation in ('C2'))
+			or
+			('ToutCollab' in (:situation_param) and epp_freeze.situation is null)
 		)
 		OR COALESCE(:situation_param, NULL) IS NULL
 	)
@@ -131,20 +133,20 @@ select 				'ASSIGNMENT'
 		left join my_plan_date pld on 1=1
 		left join emp_profiles epp on epp.person_id =paf.person_id and epp.EMP_EFFECTIVE_START_DATE<=paa.effective_start_date
 		left join emp_profiles epp_freeze on epp_freeze.person_id =paf.person_id and epp_freeze.EMP_EFFECTIVE_START_DATE<= pld.freeze_date and epp_freeze.last_situation='Y'
-		left join PER_CONTRACTS_F pcf on pcf.person_id=paa.person_id and pcf.contract_id=paa.contract_id
+		left join PER_CONTRACTS_F pcf on pcf.person_id=paa.person_id and pcf.contract_id=paa.contract_id and paa.effective_start_date between pcf.effective_start_date and pcf.effective_end_date
 			left join FND_LOOKUP_VALUES_TL lookup_contract on pcf.type = lookup_contract.lookup_code and lookup_contract.lookup_type = 'CONTRACT_TYPE' and lookup_contract.language = 'F' /*Param*/
 		left join CMP_SALARY sal on sal.person_id = paa.person_id and sal.assignment_id=paa.assignment_id and sal.date_from<=paa.effective_start_date --between  and sal.date_to
-		left join PER_PERSON_NAMES_F PPN on paf.person_id = ppn.person_id and ppn.name_type='GLOBAL'
-		left join per_departments pd on paa.organization_id = pd.organization_id
+		left join PER_PERSON_NAMES_F PPN on paf.person_id = ppn.person_id and ppn.name_type='GLOBAL' and paa.effective_start_date between ppn.effective_start_date and ppn.effective_end_date
+		left join per_departments pd on paa.organization_id = pd.organization_id and paa.effective_start_date between pd.effective_start_date and pd.effective_end_date
 		left join FUN_ALL_BUSINESS_UNITS_V fabu on paa.BUSINESS_UNIT_ID = fabu.BU_ID
 		left join PER_ASSIGN_WORK_MEASURES_F PAMMF on paa.assignment_id = PAMMF.assignment_id and PAMMF.unit = 'FTE' and paa.effective_start_date between PAMMF.effective_start_date and PAMMF.effective_end_date
 		left join HR_LOCATIONS_ALL hla on paa.location_id = hla.location_id
 		left join my_element_entries MEE on paa.person_id = mee.person_id and paa.effective_start_date BETWEEN mee.effective_start_date and mee.effective_end_date
 		where 1=1 
-		and pld.freeze_date between ppn.effective_start_date and ppn.effective_end_date
-		and pld.freeze_date between pd.effective_start_date and pd.effective_end_date
+		--and pld.freeze_date between ppn.effective_start_date and ppn.effective_end_date
+		--and pld.freeze_date between pd.effective_start_date and pd.effective_end_date
 		and pld.freeze_date between paf.effective_start_date and paf.effective_end_date
-		and pld.freeze_date between pcf.effective_start_date and pcf.effective_end_date
+		--and pld.freeze_date between pcf.effective_start_date and pcf.effective_end_date
 		and (paa.person_id,paa.assignment_id) in (select person_id, assignment_id from mes_critères_de_lancement)
 		/*and fabu.bu_name = 'CASA ES' param*/
 ),
@@ -176,23 +178,24 @@ my_assignments_profile as
 			from PER_ALL_PEOPLE_F paf
 			inner join emp_profiles epp on epp.person_id = paf.person_id
 			left join my_plan_date pld on 1=1
-			inner join PER_PERSON_NAMES_F PPN on paf.person_id = ppn.person_id and ppn.name_type='GLOBAL'
+			inner join PER_PERSON_NAMES_F PPN on paf.person_id = ppn.person_id and ppn.name_type='GLOBAL' and epp.EMP_EFFECTIVE_START_DATE between ppn.effective_start_date and ppn.effective_end_date
 			inner join PER_ALL_ASSIGNMENTS_F paa on paa.person_id = paf.person_id and assignment_type='E'  and epp.EMP_EFFECTIVE_START_DATE between paa.effective_start_date and paa.effective_end_date --and ASSIGNMENT_STATUS_TYPE = 'ACTIVE'
-			left join PER_CONTRACTS_F pcf on pcf.person_id=paa.person_id and pcf.contract_id=paa.contract_id
+			left join PER_CONTRACTS_F pcf on pcf.person_id=paa.person_id and pcf.contract_id=paa.contract_id and epp.EMP_EFFECTIVE_START_DATE between pcf.effective_start_date and pcf.effective_end_date
 			left join FND_LOOKUP_VALUES_TL lookup_contract on pcf.type = lookup_contract.lookup_code and lookup_contract.lookup_type = 'CONTRACT_TYPE' and lookup_contract.language = 'F' /*Param*/
 			left join emp_profiles epp_freeze on epp_freeze.person_id =paf.person_id and epp_freeze.EMP_EFFECTIVE_START_DATE<= pld.freeze_date and epp_freeze.last_situation='Y'
 			inner join per_periods_of_service pps on paa.person_id = pps.person_id and paa.period_of_service_id = pps.period_of_service_id
 			left join CMP_SALARY sal on sal.person_id = paa.person_id and sal.assignment_id=paa.assignment_id and epp.EMP_EFFECTIVE_START_DATE between sal.date_from and sal.date_to
-			left join per_departments pd on paa.organization_id = pd.organization_id
+			left join per_departments pd on paa.organization_id = pd.organization_id and epp.EMP_EFFECTIVE_START_DATE between pd.effective_start_date and pd.effective_end_date
 			left join FUN_ALL_BUSINESS_UNITS_V fabu on paa.BUSINESS_UNIT_ID = fabu.BU_ID
 			left join PER_ASSIGN_WORK_MEASURES_F PAMMF on paa.assignment_id = PAMMF.assignment_id and PAMMF.unit = 'FTE' and paa.effective_start_date between PAMMF.effective_start_date and PAMMF.effective_end_date
 			left join HR_LOCATIONS_ALL hla on paa.location_id = hla.location_id
 			left join my_element_entries MEE on paa.person_id = mee.person_id and epp.EMP_EFFECTIVE_START_DATE BETWEEN mee.effective_start_date and mee.effective_end_date
 			where 1=1 
-			and pld.freeze_date between ppn.effective_start_date and ppn.effective_end_date
-			and pld.freeze_date between pd.effective_start_date and pd.effective_end_date
+			--and pld.freeze_date between ppn.effective_start_date and ppn.effective_end_date
+			--and pld.freeze_date between pd.effective_start_date and pd.effective_end_date
 			and pld.freeze_date between paf.effective_start_date and paf.effective_end_date
-					and pld.freeze_date between pcf.effective_start_date and pcf.effective_end_date
+			--and pld.freeze_date between pcf.effective_start_date and pcf.effective_end_date
+			and pld.freeze_date >= epp.EMP_EFFECTIVE_START_DATE
 			and (paa.person_id,paa.assignment_id) in (select person_id, assignment_id from mes_critères_de_lancement)
 			/*and fabu.bu_name = 'CASA ES' param*/
 ),
@@ -223,24 +226,24 @@ my_assignments_salary as
 			from PER_ALL_PEOPLE_F paf
 			inner join CMP_SALARY sal on sal.person_id = paf.person_id
 			left join my_plan_date pld on 1=1
-			inner join PER_PERSON_NAMES_F PPN on paf.person_id = ppn.person_id and ppn.name_type='GLOBAL'
-			inner join PER_ALL_ASSIGNMENTS_F paa on paa.person_id = sal.person_id and paa.assignment_type='E'  and sal.date_from between paa.effective_start_date and paa.effective_end_date
-			left join PER_CONTRACTS_F pcf on pcf.person_id=paa.person_id and pcf.contract_id=paa.contract_id
+			inner join PER_PERSON_NAMES_F PPN on paf.person_id = ppn.person_id and ppn.name_type='GLOBAL' and sal.date_from between ppn.effective_start_date and ppn.effective_end_date
+			inner join PER_ALL_ASSIGNMENTS_F paa on paa.person_id = sal.person_id and paa.assignment_type='E' and sal.date_from between paa.effective_start_date and paa.effective_end_date
+			left join PER_CONTRACTS_F pcf on pcf.person_id=paa.person_id and pcf.contract_id=paa.contract_id and sal.date_from between pcf.effective_start_date and pcf.effective_end_date
 				left join FND_LOOKUP_VALUES_TL lookup_contract on pcf.type = lookup_contract.lookup_code and lookup_contract.lookup_type = 'CONTRACT_TYPE' and lookup_contract.language = 'F' /*Param*/
 			inner join per_periods_of_service pps on paa.person_id = pps.person_id and paa.period_of_service_id = pps.period_of_service_id
 			left join emp_profiles epp on epp.person_id =paf.person_id and EMP_EFFECTIVE_START_DATE<=sal.DATE_FROM
 			left join emp_profiles epp_freeze on epp_freeze.person_id =paf.person_id and epp_freeze.EMP_EFFECTIVE_START_DATE<= pld.freeze_date and epp_freeze.last_situation='Y'
 			left join PER_ALL_ASSIGNMENTS_F paa2 on paa2.person_id = paf.person_id and paa2.assignment_type='E'  and epp.EMP_EFFECTIVE_START_DATE between paa2.effective_start_date and paa2.effective_end_date --and ASSIGNMENT_STATUS_TYPE = 'ACTIVE'
-			left join per_departments pd on paa.organization_id = pd.organization_id
+			left join per_departments pd on paa.organization_id = pd.organization_id and sal.date_from between pd.effective_start_date and pd.effective_end_date
 			left join FUN_ALL_BUSINESS_UNITS_V fabu on paa.BUSINESS_UNIT_ID = fabu.BU_ID
 			left join PER_ASSIGN_WORK_MEASURES_F PAMMF on paa.assignment_id = PAMMF.assignment_id and PAMMF.unit = 'FTE' and paa.effective_start_date between PAMMF.effective_start_date and PAMMF.effective_end_date
 			left join HR_LOCATIONS_ALL hla on paa.location_id = hla.location_id
 			left join my_element_entries MEE on paa.person_id = mee.person_id and sal.date_from BETWEEN mee.effective_start_date and mee.effective_end_date
 			where 1=1 
-			and pld.freeze_date between ppn.effective_start_date and ppn.effective_end_date
-			and pld.freeze_date between pd.effective_start_date and pd.effective_end_date
+			--and pld.freeze_date between ppn.effective_start_date and ppn.effective_end_date
+			--and pld.freeze_date between pd.effective_start_date and pd.effective_end_date
 			and pld.freeze_date between paf.effective_start_date and paf.effective_end_date
-					and pld.freeze_date between pcf.effective_start_date and pcf.effective_end_date
+			--and pld.freeze_date between pcf.effective_start_date and pcf.effective_end_date
 			and (paa.person_id,paa.assignment_id) in (select person_id, assignment_id from mes_critères_de_lancement)
 			/*and fabu.bu_name = 'CASA ES' param*/
 ),
@@ -269,26 +272,26 @@ my_assignments_elements as
 		-- ,'ELEMENT' as ASS_TYPE
 			from PER_ALL_PEOPLE_F paf
 			inner join my_element_entries MEE on paf.person_id = mee.person_id
-			inner join PER_ALL_ASSIGNMENTS_F paa on paa.person_id = paf.person_id and paa.assignment_type='E'  
+			inner join PER_ALL_ASSIGNMENTS_F paa on paa.person_id = paf.person_id and paa.assignment_type='E' and mee.effective_start_date between paa.effective_start_date and paa.effective_end_date 
 			left join my_plan_date pld on 1=1
-			inner join PER_PERSON_NAMES_F PPN on paf.person_id = ppn.person_id and ppn.name_type='GLOBAL'
-			left join PER_CONTRACTS_F pcf on pcf.person_id=paa.person_id and pcf.contract_id=paa.contract_id
+			inner join PER_PERSON_NAMES_F PPN on paf.person_id = ppn.person_id and ppn.name_type='GLOBAL' and MEE.effective_start_date between ppn.effective_start_date and ppn.effective_end_date
+			left join PER_CONTRACTS_F pcf on pcf.person_id=paa.person_id and pcf.contract_id=paa.contract_id and MEE.effective_start_date between pcf.effective_start_date and pcf.effective_end_date
 				left join FND_LOOKUP_VALUES_TL lookup_contract on pcf.type = lookup_contract.lookup_code and lookup_contract.lookup_type = 'CONTRACT_TYPE' and lookup_contract.language = 'F' /*Param*/
 			inner join per_periods_of_service pps on paa.person_id = pps.person_id and paa.period_of_service_id = pps.period_of_service_id
 			left join emp_profiles epp on epp.person_id =paf.person_id and EMP_EFFECTIVE_START_DATE<=MEE.effective_start_date
 			left join emp_profiles epp_freeze on epp_freeze.person_id =paf.person_id and epp_freeze.EMP_EFFECTIVE_START_DATE<= pld.freeze_date and epp_freeze.last_situation='Y'
 			left join PER_ALL_ASSIGNMENTS_F paa2 on paa2.person_id = paf.person_id and paa2.assignment_type='E'  and epp.EMP_EFFECTIVE_START_DATE between paa2.effective_start_date and paa2.effective_end_date --and ASSIGNMENT_STATUS_TYPE = 'ACTIVE'
-			left join per_departments pd on paa.organization_id = pd.organization_id
+			left join per_departments pd on paa.organization_id = pd.organization_id and MEE.effective_start_date between pd.effective_start_date and pd.effective_end_date
 			left join FUN_ALL_BUSINESS_UNITS_V fabu on paa.BUSINESS_UNIT_ID = fabu.BU_ID
 			left join PER_ASSIGN_WORK_MEASURES_F PAMMF on paa.assignment_id = PAMMF.assignment_id and PAMMF.unit = 'FTE' and paa.effective_start_date between PAMMF.effective_start_date and PAMMF.effective_end_date
 			left join HR_LOCATIONS_ALL hla on paa.location_id = hla.location_id
 			left join CMP_SALARY sal on sal.person_id = paa.person_id and sal.assignment_id=paa.assignment_id and MEE.effective_start_date between sal.date_from and sal.date_to
 			where 1=1 
-			and mee.effective_start_date between paa.effective_start_date and paa.effective_end_date
-			and pld.freeze_date between ppn.effective_start_date and ppn.effective_end_date
-			and pld.freeze_date between pd.effective_start_date and pd.effective_end_date
+			--and mee.effective_start_date between paa.effective_start_date and paa.effective_end_date
+			--and pld.freeze_date between ppn.effective_start_date and ppn.effective_end_date
+			--and pld.freeze_date between pd.effective_start_date and pd.effective_end_date
 			and pld.freeze_date between paf.effective_start_date and paf.effective_end_date
-					and pld.freeze_date between pcf.effective_start_date and pcf.effective_end_date
+			--and pld.freeze_date between pcf.effective_start_date and pcf.effective_end_date
 			and (paa.person_id,paa.assignment_id) in (select person_id, assignment_id from mes_critères_de_lancement)
 			/*and fabu.bu_name = 'CASA ES' param*/
 ),
