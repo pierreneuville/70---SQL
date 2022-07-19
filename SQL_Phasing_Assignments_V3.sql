@@ -490,7 +490,7 @@ inner join PER_ALL_ASSIGNMENTS_F paa 	on paa.person_id=mrpa.person_id
 																												and paa2.ASSIGNMENT_STATUS_TYPE='ACTIVE' 
 																												and paa2.effective_start_date<=freeze_date
 																												and paa.business_unit_id = paa2.business_unit_id																												
-																												and paa2.assignment_id=paa.assignment_id
+																												--and paa2.assignment_id=paa.assignment_id
 																												and (paa2.person_id, paa2.assignment_id) in (select cr.person_id, cr.assignment_id from mes_critères_de_lancement cr)
 																		)
 left join last_salary_for_assignment lsfa on paa.person_id=lsfa.person_id and paa.assignment_id=lsfa.assignment_id
@@ -545,6 +545,7 @@ and (
 - Ajout du taux cible --> DONE
 - Ajouter le cas du C2 qui passe C1 KL100011573_P0 --> DONE
 - Ajouter le cas du Tout Collab à C2  KL100011585_P0 --> DONE
+- Investiguer problème A0100011605_P0 --> TODO
 - PRoblème de date de fin  A0000231600_T1B
 - Cas d'un collab sans phase > pas de ligne apparente dans la query KL100011584_P0 --> DONE*
 - Récupération de l'assignment id inactif dans le cas d'un move C1 de CASA ES à CACIB pour avoir que les phases sur CASA ES

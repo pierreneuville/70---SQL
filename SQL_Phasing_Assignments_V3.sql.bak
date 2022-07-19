@@ -388,8 +388,7 @@ select
 		ELSE effective_start_date
 	END as effective_start_date_corrected
 	,CASE
-		WHEN EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') and NEXT_EFF_START_DATE is not null and C1_C2_DIR_FREEZE is not null and C1_C2_DIR is not null and C1_C2_DIR_FREEZE=C1_C2_DIR then add_months(trunc(pld.start_date,'Q')-1,12) /*end_of_year*/
-		--WHEN LAST_DATE_KEY = to_date(to_char('31/12/4712'),'dd/mm/yyyy') and NEXT_EFF_START_DATE is not null and LAST_DATE_KEY=LAST_DATE_ASS and NEXT_EFF_START_DATE is not null then add_months(trunc(pld.start_date,'Q')-1,12) /*end_of_year*/
+		WHEN EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') and NEXT_EFF_START_DATE is /*NOT supprimé TNR*/ null and C1_C2_DIR_FREEZE is not null and C1_C2_DIR is not null and C1_C2_DIR_FREEZE=C1_C2_DIR then add_months(trunc(pld.start_date,'Q')-1,12) /*end_of_year*/
 		WHEN EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') and NEXT_EFF_START_DATE is not null then NEXT_EFF_START_DATE-1
 		WHEN effective_end_date > pld.end_date and EFFECTIVE_END_DATE = to_date(to_char('31/12/4712'),'dd/mm/yyyy') THEN add_months(trunc(pld.start_date,'Q')-1,12) /*end_of_year*/
 		WHEN effective_end_date > pld.end_date THEN pld.start_date
@@ -400,6 +399,8 @@ select
 		WHEN EFFECTIVE_END_DATE is null THEN NEXT_EFF_START_DATE-1
 		ELSE effective_end_date
 	END as effective_end_date_corrected
+	,LAST_DATE_KEY
+	,LAST_DATE_ASS
 	--,pld.freeze_date
 from my_total_assignments_without_duplicate
 left join my_plan_date pld on 1=1
@@ -413,23 +414,34 @@ and EFFECTIVE_END_DATE_CORRECTED >= pld.start_date
 --and EFFECTIVE_START_DATE_CORRECTED<=EFFECTIVE_END_DATE_CORRECTED
 ),
 
-my_real_phase_adjusted as (
-select 	a.*
-		,CASE
-			WHEN EFFECTIVE_END_DATE_CORRECTED= add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/ THEN add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/
-			WHEN EFFECTIVE_END_DATE_CORRECTED= ADD_MONTHS(TRUNC(start_date, 'YEAR'), 12)-1/24/60/60 /*end_of_year*/ THEN add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/
-			WHEN EFFECTIVE_END_DATE_CORRECTED = ACTUAL_TERMINATION_DATE AND C1_C2_DIR is not null THEN EFFECTIVE_END_DATE_CORRECTED
-			WHEN EFFECTIVE_END_DATE_CORRECTED = ACTUAL_TERMINATION_DATE AND C1_C2_DIR is null and NEXT_EFF_START_DATE is not null THEN EFFECTIVE_END_DATE_CORRECTED /*end_of_year*/
-			WHEN EFFECTIVE_END_DATE_CORRECTED = ACTUAL_TERMINATION_DATE AND C1_C2_DIR is null THEN add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/
-			ELSE LEAD(EFFECTIVE_START_DATE_CORRECTED-1) OVER (ORDER BY EFFECTIVE_START_DATE_CORRECTED)
-		END As EFFECTIVE_END_DATE_ADJUSTED
-from (
+my_real_phase_with_key as (
 	select 	mrp.* 
 			,person_id||bu_name||FTE||CONTRACT||department_name|| SALARY_AMOUNT || C1_C2_DIR || TAUX_CIBLE as KEY
 			,LAG(person_id||bu_name||FTE||CONTRACT||department_name|| SALARY_AMOUNT || C1_C2_DIR || TAUX_CIBLE ) OVER (PARTITION BY person_id,bu_name,FTE,CONTRACT,department_name, SALARY_AMOUNT, C1_C2_DIR, TAUX_CIBLE ORDER BY EFFECTIVE_START_DATE_CORRECTED) As PREV_KEY
-	from my_real_phase mrp) a
+	from my_real_phase mrp
+order by EFFECTIVE_START_DATE_CORRECTED, EFFECTIVE_END_DATE_CORRECTED
+),
+
+my_real_phase_without_key as (
+	select 	mrp.* 	
+	from my_real_phase_with_key mrp
 where PREV_KEY is null
-order by EFFECTIVE_START_DATE_CORRECTED, EFFECTIVE_END_DATE_CORRECTED),
+order by EFFECTIVE_START_DATE_CORRECTED, EFFECTIVE_END_DATE_CORRECTED
+),
+
+my_real_phase_adjusted as (
+select 	mrpwk.*
+		,CASE
+			WHEN EFFECTIVE_END_DATE_CORRECTED= add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/ THEN add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/
+			WHEN EFFECTIVE_END_DATE_CORRECTED = ACTUAL_TERMINATION_DATE AND ACTUAL_TERMINATION_DATE<>to_date(to_char('31/12/4712'),'dd/mm/yyyy') AND C1_C2_DIR is not null THEN EFFECTIVE_END_DATE_CORRECTED
+			WHEN EFFECTIVE_END_DATE_CORRECTED = ACTUAL_TERMINATION_DATE AND ACTUAL_TERMINATION_DATE<>to_date(to_char('31/12/4712'),'dd/mm/yyyy') AND C1_C2_DIR is null and NEXT_EFF_START_DATE is not null THEN EFFECTIVE_END_DATE_CORRECTED 
+			WHEN EFFECTIVE_END_DATE_CORRECTED = ACTUAL_TERMINATION_DATE AND ACTUAL_TERMINATION_DATE<>to_date(to_char('31/12/4712'),'dd/mm/yyyy') AND C1_C2_DIR is null THEN add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/
+			--WHEN LAST_DATE_ASS = to_date(to_char('31/12/4712'),'dd/mm/yyyy') and LAST_DATE_ASS=LAST_DATE_KEY THEN add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/
+			WHEN LEAD(EFFECTIVE_START_DATE_CORRECTED-1) OVER (PARTITION BY person_id ORDER BY EFFECTIVE_START_DATE_CORRECTED) is null THEN add_months(trunc(start_date,'Q')-1,12) /*end_of_year*/
+			ELSE LEAD(EFFECTIVE_START_DATE_CORRECTED-1) OVER (PARTITION BY person_id ORDER BY EFFECTIVE_START_DATE_CORRECTED)
+		END As EFFECTIVE_END_DATE_ADJUSTED
+from my_real_phase_without_key mrpwk),
+
 
 last_salary_for_assignment as (
 select person_id, assignment_id, CURRENCY_CODE from CMP_SALARY sal2
@@ -533,7 +545,8 @@ and (
 - Ajout du taux cible --> DONE
 - Ajouter le cas du C2 qui passe C1 KL100011573_P0 --> DONE
 - Ajouter le cas du Tout Collab à C2  KL100011585_P0 --> DONE
-- Cas de Tout Collab qui passe C2 KL100011585_P0
+- Investiguer problème A0100011605_P0 --> TODO
+- PRoblème de date de fin  A0000231600_T1B
 - Cas d'un collab sans phase > pas de ligne apparente dans la query KL100011584_P0 --> DONE*
 - Récupération de l'assignment id inactif dans le cas d'un move C1 de CASA ES à CACIB pour avoir que les phases sur CASA ES
 
