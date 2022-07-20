@@ -241,7 +241,7 @@ my_assignments_salary as
 			left join FUN_ALL_BUSINESS_UNITS_V fabu on paa.BUSINESS_UNIT_ID = fabu.BU_ID
 			left join PER_ASSIGN_WORK_MEASURES_F PAMMF on paa.assignment_id = PAMMF.assignment_id and PAMMF.unit = 'FTE' and paa.effective_start_date between PAMMF.effective_start_date and PAMMF.effective_end_date
 			left join HR_LOCATIONS_ALL hla on paa.location_id = hla.location_id
-			left join my_element_entries MEE on paa.person_id = mee.person_id and mee.effective_start_date <= pld.end_date and mee.effective_end_date >= pld.start_date
+			left join my_element_entries MEE on paa.person_id = mee.person_id and sal.date_from BETWEEN mee.effective_start_date and mee.effective_end_date
 			where 1=1 
 			--and pld.freeze_date between ppn.effective_start_date and ppn.effective_end_date
 			--and pld.freeze_date between pd.effective_start_date and pd.effective_end_date
@@ -550,9 +550,7 @@ and (
 - Ajouter le cas du C2 qui passe C1 KL100011573_P0 --> DONE
 - Ajouter le cas du Tout Collab à C2  KL100011585_P0 --> DONE
 - Investiguer problème A0100011605_P0 --> TODO
-- Problème de date de fin  A0000231600_T1B
-- Presence callendaire à 0 pour IUG = KL100011570_P0
-- Cas de test sur Hermes avec Taverne
+- PRoblème de date de fin  A0000231600_T1B
 - Cas d'un collab sans phase > pas de ligne apparente dans la query KL100011584_P0 --> DONE*
 - Récupération de l'assignment id inactif dans le cas d'un move C1 de CASA ES à CACIB pour avoir que les phases sur CASA ES
 
