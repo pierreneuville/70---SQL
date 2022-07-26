@@ -39,9 +39,10 @@ select
 			and HPI.ATTRIBUTE_DATE1 is not null
 			and HPI.ATTRIBUTE_DATE1<=pld.freeze_date
 			and HPI.ATTRIBUTE1 is not null
-			and HPI.SECTION_ID in ('300000003197644' /*Dir Groupe*/, '300000020691903' /*Personnel identifié*/) /*param à vérifier lors de la migration d'environnements*/
-			--and HPB.person_id='300000045040963'
-		union
+			and HPI.SECTION_ID in 
+			(select section_id from HRT_PROFILE_TYP_SECTIONS_tL  where language='F' and name in ('Cercle cadres dirigeants Groupe','Cercle cadres dirigeants Entités')
+			--'300000003197644' /*Dir Groupe*/,'300000020691903' /*Personnel identifié*/ /*param à vérifier lors de la migration d'environnements*/
+			) 		union
 		select hpb.person_id
 				,HPI.ATTRIBUTE2 as SITUATION
 				,HPI.ATTRIBUTE_DATE2 as EMP_EFFECTIVE_START_DATE 

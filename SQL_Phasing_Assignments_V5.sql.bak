@@ -550,9 +550,9 @@ order by PERSON_NUMBER, EFFECTIVE_START_DATE_CORRECTED, EFFECTIVE_END_DATE_ADJUS
 select * from phase_with_calcul_presence
 WHERE 1=1
 and (
-		(:mode_campagne_param ='Y' and row_num <> 1)
+		(:mode_campagne_param ='Campagne' and row_num <> 1)
 		or
-		(:mode_campagne_param ='N' and row_num = row_num)
+		(:mode_campagne_param ='Debug' and row_num = row_num)
 	)
 
 	
